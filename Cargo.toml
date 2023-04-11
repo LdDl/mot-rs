@@ -16,4 +16,5 @@ categories = ["algorithms", "computer-vision", "mathematics", "science"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-kalman-rust = "0.2.0" 
+kalman-rust = "0.2.0"
+uuid = { version = "1.3.1", features = ["serde", "v4"] }
