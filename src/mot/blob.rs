@@ -1,7 +1,18 @@
+use std::error::Error;
+
+use kalman_rust::kalman::{
+    Kalman2D
+};
+
 use crate::utils::{
     Rect,
     Point,
     euclidean_distance
+};
+
+use chrono::{
+    DateTime,
+    Utc
 };
 
 pub trait Blob {
@@ -17,9 +28,12 @@ pub struct SimpleBlob {
     current_center: Point,
     predicted_next_position: Point,
     track: Vec<Point>,
+    max_track_len: usize,
     active: bool,
     no_match_times: usize,
-    diagonal: f32
+    diagonal: f32,
+    tracker: Kalman2D
+    // @todo: keep track of object timestamps? default/new_with_time(...)?
 }
 
 impl SimpleBlob {
@@ -27,25 +41,48 @@ impl SimpleBlob {
         let center_x = _current_bbox.x as f32 + 0.5 * _current_bbox.width as f32;
         let center_y = _current_bbox.y as f32 + 0.5 * _current_bbox.height as f32;
         let _diagonal = f32::sqrt((_current_bbox.width*_current_bbox.width) as f32 + (_current_bbox.height*_current_bbox.height) as f32);
+
+        /* Kalman filter props */
+        //
+        // Why set initial state at all? See answer here: https://github.com/LdDl/kalman-rs/blob/master/src/kalman/kalman_2d.rs#L126
+        //
+        let dt = 1.0;
+        let ux = 1.0;
+        let uy = 1.0;
+        let std_dev_a = 2.0;
+        let std_dev_mx = 0.1;
+        let std_dev_my = 0.1;
+        let kf = Kalman2D::new_with_state(dt, ux, uy, std_dev_a, std_dev_mx, std_dev_my, center_x, center_y);
         SimpleBlob {
             current_bbox: _current_bbox,
-            current_center: Point{x: f32::round(center_x) as i32, y: f32::round(center_y) as i32},
+            current_center: Point::new(f32::round(center_x) as i32, f32::round(center_y) as i32),
             predicted_next_position: Point::default(),
             track: Vec::new(),
+            max_track_len: 150,
             active: false,
             no_match_times: 0,
-            diagonal: _diagonal
+            diagonal: _diagonal,
+            tracker: kf
         }
     }
     pub fn partial_copy(&self) -> Self {
+        let dt = 1.0;
+        let ux = 1.0;
+        let uy = 1.0;
+        let std_dev_a = 2.0;
+        let std_dev_mx = 0.1;
+        let std_dev_my = 0.1;
+        let kf = Kalman2D::new_with_state(dt, ux, uy, std_dev_a, std_dev_mx, std_dev_my, self.current_center.x as f32, self.current_center.y as f32);
         SimpleBlob {
             current_bbox: self.current_bbox.clone(),
             current_center: self.current_center.clone(),
             predicted_next_position: Point::default(),
             track: Vec::new(),
+            max_track_len: self.max_track_len,
             active: false,
             no_match_times: 0,
-            diagonal: self.diagonal
+            diagonal: self.diagonal,
+            tracker: kf
         }
     }
     pub fn activate(&mut self) {
@@ -57,11 +94,17 @@ impl SimpleBlob {
     pub fn get_diagonal(&self) -> f32 {
         self.diagonal
     }
+    pub fn get_max_track_len(&self) -> usize{
+        self.max_track_len
+    }
+    pub fn set_max_track_len(&mut self, max_track_len: usize) {
+        self.max_track_len = max_track_len
+    }
+    pub fn get_no_match_times(&self) -> usize {
+        self.no_match_times
+    }
     pub fn inc_no_match(&mut self) {
         self.no_match_times += 1
-    }
-    fn dec_no_match(&mut self) {
-        self.no_match_times -= 1
     }
     pub fn predict_next_position(&mut self, _depth: usize) {
         let track_len = self.track.len();
@@ -93,10 +136,46 @@ impl SimpleBlob {
         self.predicted_next_position.x = self.track[track_len - 1].x + delta_x;
         self.predicted_next_position.y = self.track[track_len - 1].y + delta_y;
     }
-    pub fn update(&mut self, newb: &SimpleBlob) {
-        //@todo update state
-    }
+    pub fn update(&mut self, newb: &SimpleBlob) -> Result<(), Box<dyn Error>> {
+        // Update center
+        self.current_center = newb.current_center.to_owned();
+        self.current_bbox = newb.current_bbox.to_owned();
 
+        // Smooth center via Kalman filter
+        self.tracker.predict();
+        match self.tracker.update(newb.current_center.x as f32, newb.current_center.y as f32) {
+            Ok(_) =>{
+                // Update center and re-evaluate bounding box
+                let state = self.tracker.get_state();
+                let old_x = self.current_center.x;
+                let old_y = self.current_center.y;
+                self.current_center.x = f32::round(state.0) as i32;
+                self.current_center.y = f32::round(state.1) as i32;
+                let diff_x = self.current_center.x - old_x;
+                let diff_y = self.current_center.y - old_y;
+                self.current_bbox = Rect::new(
+                    self.current_bbox.x - diff_x,
+                    self.current_bbox.y - diff_y,
+                    self.current_bbox.width - diff_x,
+                    self.current_bbox.height - diff_y
+                );
+                // Update remaining properties
+                self.diagonal = newb.diagonal;
+                self.active = true;
+                self.no_match_times = 0;
+
+                // Update track
+                self.track.push(self.current_center.clone());
+                if self.track.len() > self.max_track_len {
+                    self.track = self.track[1..].to_vec();
+                }
+            },
+            Err(e) => {
+                return Err(format!("Can't update object tracker: {}", e))?;
+            }
+        };
+        Ok(())
+    }
     pub fn distance_to(&self, b: &SimpleBlob) -> f32 {
         return euclidean_distance(&self.current_center, &b.current_center);
     }

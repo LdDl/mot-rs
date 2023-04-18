@@ -1,3 +1,4 @@
+use std::error::Error;
 use uuid::Uuid;
 use std::collections::HashMap;
 use crate::mot::SimpleBlob;
@@ -51,16 +52,14 @@ impl SimpleTracker {
         }
     }
     // Matches new objects to existing ones
-    pub fn match_objects(&mut self, new_objects: Vec<SimpleBlob>) {
+    pub fn match_objects(&mut self, new_objects: Vec<SimpleBlob>) -> Result<(), Box<dyn Error>>{
         
-        // let mut blobies_to_register = vec![];
-
         for (_, object) in self.objects.iter_mut() {
             object.deactivate(); // Make sure that object is marked as deactivated
             object.predict_next_position(self.depth_prediction);
         }
 
-        for new_object in new_objects.iter() {
+        for new_object in new_objects {
             // Find existing blob with min distance to new one
             let mut min_id = Uuid::default();
             let mut min_distance = f32::MAX;
@@ -77,7 +76,7 @@ impl SimpleTracker {
             if min_distance < new_object.get_diagonal() * 0.5 || min_distance < self.min_dist_threshold {
                 match self.objects.get_mut(&min_id) {
                     Some(v) => {
-                        v.update(new_object);
+                        v.update(&new_object)?;
                     },
                     None => {
                         // continue
@@ -88,9 +87,17 @@ impl SimpleTracker {
             }
             // Otherwise register object as a new one
             let new_id = Uuid::new_v4();
-            self.objects.insert(new_id, new_object.partial_copy());
+            self.objects.insert(new_id, new_object); // Just take ownership of an object since we do not need original vector anymore
         }
+
         // Clean up existing data
-        // @todo: delete blobs or increment no_match_times
+        self.objects.retain(|_, object| {
+            object.inc_no_match();
+            // Remove object if it was not found for a long time
+            let delete = object.get_no_match_times() > self.max_no_match;
+            !delete // <- if we want to keep object closure should return true
+        });
+
+        Ok(())
     }
 }

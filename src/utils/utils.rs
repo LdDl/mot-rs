@@ -7,7 +7,7 @@ pub struct Rect {
 }
 
 impl Rect {
-    pub fn default() -> Rect {
+    pub fn default() -> Self {
         Rect {
             x: 0,
             y: 0,
@@ -15,7 +15,7 @@ impl Rect {
             height: 0
         }
     }
-    pub fn new(_x: i32, _y: i32, _height: i32, _width: i32) -> Rect {
+    pub fn new(_x: i32, _y: i32, _height: i32, _width: i32) -> Self {
         Rect {
             x: _x,
             y: _y,
@@ -32,10 +32,16 @@ pub struct Point {
 }
 
 impl Point {
-    pub fn default() -> Point {
+    pub fn default() -> Self {
         Point {
             x: 0,
             y: 0
+        }
+    }
+    pub fn new(_x: i32, _y: i32) -> Self {
+        Point {
+            x: _x,
+            y: _y
         }
     }
 }
@@ -51,8 +57,8 @@ mod tests {
     use super::*;
     #[test]
     fn test_euclidean_distance() {
-        let p1 = Point{x: 341, y: 264};
-        let p2 = Point{x: 421, y: 427};
+        let p1 = Point::new(341, 264);
+        let p2 = Point::new(421, 427);
         let ans = euclidean_distance(&p1, &p2);
         assert_eq!(181.57367651, ans);
     }
