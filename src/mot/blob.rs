@@ -186,9 +186,9 @@ impl SimpleBlob {
         Ok(())
     }
     pub fn distance_to(&self, b: &SimpleBlob) -> f32 {
-        return euclidean_distance(&self.current_center, &b.current_center);
+        euclidean_distance(&self.current_center, &b.current_center)
     }
     pub fn distance_to_predicted(&self, b: &SimpleBlob) -> f32 {
-        return euclidean_distance(&self.predicted_next_position, &b.predicted_next_position);
+        euclidean_distance(&self.predicted_next_position, &b.predicted_next_position)
     }
 }

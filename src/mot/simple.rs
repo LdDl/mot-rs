@@ -9,8 +9,6 @@ pub struct SimpleTracker {
     max_no_match: usize,
     // Threshold distance (most of time in pixels). Default 30.0
     min_dist_threshold: f32,
-    // Number of points in object's track to predict next position
-    depth_prediction: usize,
     // Storage
     objects: HashMap<Uuid, SimpleBlob>
 }
@@ -25,10 +23,9 @@ impl SimpleTracker {
     /// let mut tracker = SimpleTracker::default();
     /// ```
     pub fn default() -> Self {
-        return SimpleTracker{
+        SimpleTracker{
             max_no_match: 75,
             min_dist_threshold: 30.0,
-            depth_prediction: 5,
             objects: HashMap::new(),
         }
     }
@@ -40,14 +37,12 @@ impl SimpleTracker {
     /// use mot_rs::mot::SimpleTracker;
     /// let max_no_match: usize = 100;
     /// let min_dist_threshold: f32 = 15.0;
-    /// let depth_prediction: usize = 5;
-    /// let mut tracker = SimpleTracker::new(max_no_match, min_dist_threshold, depth_prediction);
+    /// let mut tracker = SimpleTracker::new(max_no_match, min_dist_threshold);
     /// ```
-    pub fn new(_max_no_match: usize, _min_dist_threshold: f32, _depth_prediction: usize) -> Self {
-        return SimpleTracker{
+    pub fn new(_max_no_match: usize, _min_dist_threshold: f32) -> Self {
+        SimpleTracker{
             max_no_match: _max_no_match,
             min_dist_threshold: _min_dist_threshold,
-            depth_prediction: _depth_prediction,
             objects: HashMap::new(),
         }
     }
@@ -55,7 +50,7 @@ impl SimpleTracker {
     pub fn match_objects(&mut self, new_objects: Vec<SimpleBlob>) -> Result<(), Box<dyn Error>>{
         for (_, object) in self.objects.iter_mut() {
             object.deactivate(); // Make sure that object is marked as deactivated
-            // object.predict_next_position_naive(self.depth_prediction);
+            // object.predict_next_position_naive(5);
             object.predict_next_position();
         }
         for new_object in new_objects {
@@ -68,7 +63,7 @@ impl SimpleTracker {
                 let dist_verified = f32::min(dist, dist_predicted);
                 if dist_verified < min_distance {
                     min_distance = dist_verified;
-                    min_id = j.clone();
+                    min_id = *j;
                 }
             }
             // Additional check to filter objects
