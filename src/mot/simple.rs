@@ -53,19 +53,18 @@ impl SimpleTracker {
     }
     // Matches new objects to existing ones
     pub fn match_objects(&mut self, new_objects: Vec<SimpleBlob>) -> Result<(), Box<dyn Error>>{
-        
         for (_, object) in self.objects.iter_mut() {
             object.deactivate(); // Make sure that object is marked as deactivated
-            object.predict_next_position(self.depth_prediction);
+            // object.predict_next_position_naive(self.depth_prediction);
+            object.predict_next_position();
         }
-
         for new_object in new_objects {
             // Find existing blob with min distance to new one
             let mut min_id = Uuid::default();
             let mut min_distance = f32::MAX;
             for (j, object) in self.objects.iter() {
                 let dist = new_object.distance_to(object);
-                let dist_predicted = new_object.distance_to_predicted(object); // @todo: object.predicted_pos is always 0.0. Isn't it?
+                let dist_predicted = new_object.distance_to_predicted(object);
                 let dist_verified = f32::min(dist, dist_predicted);
                 if dist_verified < min_distance {
                     min_distance = dist_verified;
@@ -89,7 +88,6 @@ impl SimpleTracker {
             let new_id = Uuid::new_v4();
             self.objects.insert(new_id, new_object); // Just take ownership of an object since we do not need original vector anymore
         }
-
         // Clean up existing data
         self.objects.retain(|_, object| {
             object.inc_no_match();
@@ -97,7 +95,6 @@ impl SimpleTracker {
             let delete = object.get_no_match_times() > self.max_no_match;
             !delete // <- if we want to keep object closure should return true
         });
-
         Ok(())
     }
 }

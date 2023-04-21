@@ -20,7 +20,7 @@ pub trait Blob {
     fn exists(&self) -> bool;
     fn inc_no_match(&mut self);
     fn dec_no_match(&mut self);
-    fn predict_next_position(&mut self, _depth: usize);
+    fn predict_next_position_naive(&mut self, _depth: usize);
 }
 
 pub struct SimpleBlob {
@@ -106,7 +106,16 @@ impl SimpleBlob {
     pub fn inc_no_match(&mut self) {
         self.no_match_times += 1
     }
-    pub fn predict_next_position(&mut self, _depth: usize) {
+    // Execute Kalman filter's first step but without re-evaluating state vector based on Kalman gain
+    pub fn predict_next_position(&mut self) {
+        self.tracker.predict();
+        let (state_x, state_y) = self.tracker.get_state();
+        self.predicted_next_position.x = f32::round(state_x) as i32;
+        self.predicted_next_position.y = f32::round(state_y) as i32;
+    }
+    // Naive old approach to give an idea what is going on
+    // I've saved this method just for retrospective
+    pub fn predict_next_position_naive(&mut self, _depth: usize) {
         let track_len = self.track.len();
         let depth = usize::min(_depth, track_len);
         if depth <= 1 {
@@ -136,21 +145,21 @@ impl SimpleBlob {
         self.predicted_next_position.x = self.track[track_len - 1].x + delta_x;
         self.predicted_next_position.y = self.track[track_len - 1].y + delta_y;
     }
+    // Update blobs position and execute Kalman filter's second step (evalute state vector based on Kalman gain)
     pub fn update(&mut self, newb: &SimpleBlob) -> Result<(), Box<dyn Error>> {
         // Update center
         self.current_center = newb.current_center.to_owned();
         self.current_bbox = newb.current_bbox.to_owned();
 
-        // Smooth center via Kalman filter
-        self.tracker.predict();
-        match self.tracker.update(newb.current_center.x as f32, newb.current_center.y as f32) {
+        // Smooth center via Kalman filter.
+        match self.tracker.update(self.current_center.x as f32, self.current_center.y as f32) {
             Ok(_) =>{
                 // Update center and re-evaluate bounding box
-                let state = self.tracker.get_state();
+                let (state_x, state_y) = self.tracker.get_state();
                 let old_x = self.current_center.x;
                 let old_y = self.current_center.y;
-                self.current_center.x = f32::round(state.0) as i32;
-                self.current_center.y = f32::round(state.1) as i32;
+                self.current_center.x = f32::round(state_x) as i32;
+                self.current_center.y = f32::round(state_y) as i32;
                 let diff_x = self.current_center.x - old_x;
                 let diff_y = self.current_center.y - old_y;
                 self.current_bbox = Rect::new(
