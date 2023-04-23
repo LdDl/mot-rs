@@ -38,11 +38,36 @@ pub struct SimpleBlob {
 }
 
 impl SimpleBlob {
+    pub fn new_with_dt(_current_bbox: Rect, dt: f32) -> Self {
+        let center_x = _current_bbox.x as f32 + 0.5 * _current_bbox.width as f32;
+        let center_y = _current_bbox.y as f32 + 0.5 * _current_bbox.height as f32;
+        let _diagonal = f32::sqrt((_current_bbox.width*_current_bbox.width) as f32 + (_current_bbox.height*_current_bbox.height) as f32);
+        /* Kalman filter props */
+        //
+        // Why set initial state at all? See answer here: https://github.com/LdDl/kalman-rs/blob/master/src/kalman/kalman_2d.rs#L126
+        //
+        let ux = 1.0;
+        let uy = 1.0;
+        let std_dev_a = 2.0;
+        let std_dev_mx = 0.1;
+        let std_dev_my = 0.1;
+        let kf = Kalman2D::new_with_state(dt, ux, uy, std_dev_a, std_dev_mx, std_dev_my, center_x, center_y);
+        SimpleBlob {
+            current_bbox: _current_bbox,
+            current_center: Point::new(f32::round(center_x) as i32, f32::round(center_y) as i32),
+            predicted_next_position: Point::default(),
+            track: Vec::new(),
+            max_track_len: 150,
+            active: false,
+            no_match_times: 0,
+            diagonal: _diagonal,
+            tracker: kf
+        }
+    }
     pub fn new(_current_bbox: Rect) -> Self {
         let center_x = _current_bbox.x as f32 + 0.5 * _current_bbox.width as f32;
         let center_y = _current_bbox.y as f32 + 0.5 * _current_bbox.height as f32;
         let _diagonal = f32::sqrt((_current_bbox.width*_current_bbox.width) as f32 + (_current_bbox.height*_current_bbox.height) as f32);
-
         /* Kalman filter props */
         //
         // Why set initial state at all? See answer here: https://github.com/LdDl/kalman-rs/blob/master/src/kalman/kalman_2d.rs#L126
@@ -63,26 +88,6 @@ impl SimpleBlob {
             active: false,
             no_match_times: 0,
             diagonal: _diagonal,
-            tracker: kf
-        }
-    }
-    pub fn partial_copy(&self) -> Self {
-        let dt = 1.0;
-        let ux = 1.0;
-        let uy = 1.0;
-        let std_dev_a = 2.0;
-        let std_dev_mx = 0.1;
-        let std_dev_my = 0.1;
-        let kf = Kalman2D::new_with_state(dt, ux, uy, std_dev_a, std_dev_mx, std_dev_my, self.current_center.x as f32, self.current_center.y as f32);
-        SimpleBlob {
-            current_bbox: self.current_bbox.clone(),
-            current_center: self.current_center.clone(),
-            predicted_next_position: Point::default(),
-            track: Vec::new(),
-            max_track_len: self.max_track_len,
-            active: false,
-            no_match_times: 0,
-            diagonal: self.diagonal,
             tracker: kf
         }
     }
@@ -158,17 +163,13 @@ impl SimpleBlob {
         self.current_center = newb.current_center.to_owned();
         self.current_bbox = newb.current_bbox.to_owned();
 
-        let old_x = self.current_center.x;
-        let old_y = self.current_center.y;
-        
         // Smooth center via Kalman filter.
-        self.tracker.predict();
- 
-        let (dbg_p_x, dbg_p_y) = self.tracker.get_state();
         match self.tracker.update(newb.current_center.x as f32, newb.current_center.y as f32) {
             Ok(_) =>{
                 // Update center and re-evaluate bounding box
                 let (state_x, state_y) = self.tracker.get_state();
+                let old_x = self.current_center.x;
+                let old_y = self.current_center.y;
                 self.current_center.x = f32::round(state_x) as i32;
                 self.current_center.y = f32::round(state_y) as i32;
                 let diff_x = self.current_center.x - old_x;
@@ -194,8 +195,6 @@ impl SimpleBlob {
                 return Err(format!("Can't update object tracker: {}", e))?;
             }
         };
-        let (dbg_u_x, dbg_u_y) = self.tracker.get_state();
-        println!("{};{};{};{};{};{}", old_x, old_y, f32::round(dbg_p_x) as i32, f32::round(dbg_p_y) as i32, f32::round(dbg_u_x) as i32, f32::round(dbg_u_y) as i32);
         Ok(())
     }
     pub fn distance_to(&self, b: &SimpleBlob) -> f32 {
