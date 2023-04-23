@@ -23,6 +23,7 @@ pub trait Blob {
     fn predict_next_position_naive(&mut self, _depth: usize);
 }
 
+#[derive(Debug)]
 pub struct SimpleBlob {
     current_bbox: Rect,
     current_center: Point,
@@ -91,8 +92,14 @@ impl SimpleBlob {
     pub fn deactivate(&mut self) {
         self.active = false
     }
+    pub fn get_center(&self) -> Point {
+        Point::new(self.current_center.x, self.current_center.y)
+    }
     pub fn get_diagonal(&self) -> f32 {
         self.diagonal
+    }
+    pub fn get_track(&self) -> &Vec<Point> {
+        &self.track
     }
     pub fn get_max_track_len(&self) -> usize{
         self.max_track_len
@@ -151,13 +158,17 @@ impl SimpleBlob {
         self.current_center = newb.current_center.to_owned();
         self.current_bbox = newb.current_bbox.to_owned();
 
+        let old_x = self.current_center.x;
+        let old_y = self.current_center.y;
+        
         // Smooth center via Kalman filter.
-        match self.tracker.update(self.current_center.x as f32, self.current_center.y as f32) {
+        self.tracker.predict();
+ 
+        let (dbg_p_x, dbg_p_y) = self.tracker.get_state();
+        match self.tracker.update(newb.current_center.x as f32, newb.current_center.y as f32) {
             Ok(_) =>{
                 // Update center and re-evaluate bounding box
                 let (state_x, state_y) = self.tracker.get_state();
-                let old_x = self.current_center.x;
-                let old_y = self.current_center.y;
                 self.current_center.x = f32::round(state_x) as i32;
                 self.current_center.y = f32::round(state_y) as i32;
                 let diff_x = self.current_center.x - old_x;
@@ -183,6 +194,8 @@ impl SimpleBlob {
                 return Err(format!("Can't update object tracker: {}", e))?;
             }
         };
+        let (dbg_u_x, dbg_u_y) = self.tracker.get_state();
+        println!("{};{};{};{};{};{}", old_x, old_y, f32::round(dbg_p_x) as i32, f32::round(dbg_p_y) as i32, f32::round(dbg_u_x) as i32, f32::round(dbg_u_y) as i32);
         Ok(())
     }
     pub fn distance_to(&self, b: &SimpleBlob) -> f32 {

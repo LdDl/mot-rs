@@ -1,4 +1,4 @@
-#[derive(Clone, Default)]
+#[derive(Clone, Default, Debug)]
 pub struct Rect {
     pub x: i32,
     pub y: i32,
@@ -17,7 +17,7 @@ impl Rect {
     }
 }
 
-#[derive(Clone, Default)]
+#[derive(Clone, Default, Debug)]
 pub struct Point {
     pub x: i32,
     pub y: i32
