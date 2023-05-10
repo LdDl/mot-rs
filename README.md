@@ -43,7 +43,7 @@ We're using pretty simple MOT algorithm, so no hard tasks for now.
 We are going to use [itertools](https://github.com/rust-itertools/itertools#itertools) just to simplify zipping trajectories.
 
 ```rust
-use mot_rs::{
+use mot_rs::mot::{
     SimpleTracker,
     SimpleBlob
 };
