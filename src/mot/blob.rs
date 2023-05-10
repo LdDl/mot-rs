@@ -65,31 +65,7 @@ impl SimpleBlob {
         }
     }
     pub fn new(_current_bbox: Rect) -> Self {
-        let center_x = _current_bbox.x as f32 + 0.5 * _current_bbox.width as f32;
-        let center_y = _current_bbox.y as f32 + 0.5 * _current_bbox.height as f32;
-        let _diagonal = f32::sqrt((_current_bbox.width*_current_bbox.width) as f32 + (_current_bbox.height*_current_bbox.height) as f32);
-        /* Kalman filter props */
-        //
-        // Why set initial state at all? See answer here: https://github.com/LdDl/kalman-rs/blob/master/src/kalman/kalman_2d.rs#L126
-        //
-        let dt = 1.0;
-        let ux = 1.0;
-        let uy = 1.0;
-        let std_dev_a = 2.0;
-        let std_dev_mx = 0.1;
-        let std_dev_my = 0.1;
-        let kf = Kalman2D::new_with_state(dt, ux, uy, std_dev_a, std_dev_mx, std_dev_my, center_x, center_y);
-        SimpleBlob {
-            current_bbox: _current_bbox,
-            current_center: Point::new(f32::round(center_x) as i32, f32::round(center_y) as i32),
-            predicted_next_position: Point::default(),
-            track: Vec::new(),
-            max_track_len: 150,
-            active: false,
-            no_match_times: 0,
-            diagonal: _diagonal,
-            tracker: kf
-        }
+        return SimpleBlob::new_with_dt(_current_bbox, 1.0);
     }
     pub fn activate(&mut self) {
         self.active = true
