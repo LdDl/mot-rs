@@ -98,6 +98,16 @@ impl SimpleTracker {
     }
 }
 
+use std::fmt;
+impl fmt::Display for SimpleTracker {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "Maximum no match: {}\n\tMinimum threshold distance: {}",
+            self.max_no_match,
+            self.min_dist_threshold
+        )
+    }
+}
+
 
 mod tests {
     #[test]
