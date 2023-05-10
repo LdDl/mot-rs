@@ -10,7 +10,7 @@ pub struct SimpleTracker {
     // Threshold distance (most of time in pixels). Default 30.0
     min_dist_threshold: f32,
     // Storage
-    objects: HashMap<Uuid, SimpleBlob>
+    pub objects: HashMap<Uuid, SimpleBlob>
 }
 
 impl SimpleTracker {
@@ -124,11 +124,13 @@ mod tests {
         assert_eq!(mot.objects.len(), 3);
 
         // for object in mot.objects {
-        //     println!("{}", object.0);
+        //     print!("{};", object.0);
         //     let track = object.1.get_track();
         //     for pt in track {
-        //         println!("\t{};{}", pt.x, pt.y);
+        //         print!("{},{};", pt.x, pt.y);
         //     }
+        //     println!();
+        //     println!();
         // }
     }
 }
