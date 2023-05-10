@@ -70,7 +70,7 @@ fn main() {
             }
         };
 
-        for object in mot.objects {
+        for object in &mot.objects {
             print!("{};", object.0);
             let track = object.1.get_track();
             for pt in track {

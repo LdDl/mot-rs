@@ -123,7 +123,7 @@ mod tests {
 
         assert_eq!(mot.objects.len(), 3);
 
-        // for object in mot.objects {
+        // for object in &mot.objects {
         //     print!("{};", object.0);
         //     let track = object.1.get_track();
         //     for pt in track {
