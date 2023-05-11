@@ -179,10 +179,6 @@ impl SimpleBlob {
                 if self.track.len() > self.max_track_len {
                     self.track = self.track[1..].to_vec();
                 }
-
-                // Last but not least.
-                // There is no exported method to mutate blob's identifier currently
-                self.id = newb.get_id();
             },
             Err(e) => {
                 return Err(format!("Can't update object tracker: {}", e))?;

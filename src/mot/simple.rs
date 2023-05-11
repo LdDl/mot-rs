@@ -125,16 +125,23 @@ mod tests {
             let blob_two = super::SimpleBlob::new_with_dt(crate::utils::Rect::new(bbox_two[0],bbox_two[1],bbox_two[2] -bbox_two[0],bbox_two[3]- bbox_two[1]), dt);
             let blob_three = super::SimpleBlob::new_with_dt(crate::utils::Rect::new(bbox_three[0],bbox_three[1],bbox_three[2] -bbox_three[0],bbox_three[3]- bbox_three[1]), dt);
 
-            match mot.match_objects(&mut vec![blob_one, blob_two, blob_three]) {
+            let mut blobs = vec![blob_one, blob_two, blob_three];
+
+            // for blob in blobs.iter() {
+            //     println!("id before: {:?}", blob.get_id());
+            // }
+            match mot.match_objects(&mut blobs) {
                 Ok(_) => {},
                 Err(err) => {
                     println!("{:?}", err);
                 }
             };
+            // for blob in blobs.iter() {
+            //     println!("\tid after: {:?}", blob.get_id());
+            // }
         }
 
         assert_eq!(mot.objects.len(), 3);
-
         // for object in &mot.objects {
         //     print!("{};", object.0);
         //     let track = object.1.get_track();
