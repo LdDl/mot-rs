@@ -81,7 +81,10 @@ impl SimpleBlob {
         self.id
     }
     pub fn get_center(&self) -> Point {
-        Point::new(self.current_center.x, self.current_center.y)
+        self.current_center.clone()
+    }
+    pub fn get_bbox(&self) -> Rect {
+        self.current_bbox.clone()
     }
     pub fn get_diagonal(&self) -> f32 {
         self.diagonal
