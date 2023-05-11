@@ -47,14 +47,14 @@ impl SimpleTracker {
         }
     }
     // Matches new objects to existing ones
-    pub fn match_objects(&mut self, new_objects: Vec<SimpleBlob>) -> Result<(), Box<dyn Error>>{
+    pub fn match_objects(&mut self, new_objects: &mut Vec<SimpleBlob>) -> Result<(), Box<dyn Error>>{
         for (_, object) in self.objects.iter_mut() {
             object.deactivate(); // Make sure that object is marked as deactivated
             // object.predict_next_position_naive(5);
             object.predict_next_position();
         }
         let mut blobs_to_register: HashMap<Uuid, SimpleBlob> = HashMap::new();
-        for new_object in new_objects {
+        for new_object in new_objects.iter_mut() {
             // Find existing blob with min distance to new one
             let mut min_id = Uuid::default();
             let mut min_distance = f32::MAX;
@@ -73,6 +73,9 @@ impl SimpleTracker {
                 match self.objects.get_mut(&min_id) {
                     Some(v) => {
                         v.update(&new_object)?;
+                        // Last but not least:
+                        // We need to update ID of new object to match existing one (that is why we have &mut in function definition)
+                        new_object.set_id(v.get_id());
                     },
                     None => {
                         // continue
@@ -82,7 +85,7 @@ impl SimpleTracker {
                 continue;
             }
             // Otherwise register object as a new one
-            blobs_to_register.insert(new_object.get_id(), new_object);
+            blobs_to_register.insert(new_object.get_id(), new_object.clone());
         }
         self.objects.extend(blobs_to_register);
 
@@ -122,7 +125,7 @@ mod tests {
             let blob_two = super::SimpleBlob::new_with_dt(crate::utils::Rect::new(bbox_two[0],bbox_two[1],bbox_two[2] -bbox_two[0],bbox_two[3]- bbox_two[1]), dt);
             let blob_three = super::SimpleBlob::new_with_dt(crate::utils::Rect::new(bbox_three[0],bbox_three[1],bbox_three[2] -bbox_three[0],bbox_three[3]- bbox_three[1]), dt);
 
-            match mot.match_objects(vec![blob_one, blob_two, blob_three]) {
+            match mot.match_objects(&mut vec![blob_one, blob_two, blob_three]) {
                 Ok(_) => {},
                 Err(err) => {
                     println!("{:?}", err);

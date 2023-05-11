@@ -25,7 +25,7 @@ pub trait Blob {
     fn predict_next_position_naive(&mut self, _depth: usize);
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct SimpleBlob {
     id: Uuid,
     current_bbox: Rect,
@@ -79,6 +79,9 @@ impl SimpleBlob {
     }
     pub fn get_id(&self) -> Uuid {
         self.id
+    }
+    pub fn set_id(&mut self, new_id: Uuid) {
+        self.id = new_id
     }
     pub fn get_center(&self) -> Point {
         self.current_center.clone()
