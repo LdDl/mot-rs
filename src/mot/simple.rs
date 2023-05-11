@@ -82,8 +82,7 @@ impl SimpleTracker {
                 continue;
             }
             // Otherwise register object as a new one
-            let new_id = Uuid::new_v4();
-            blobs_to_register.insert(new_id, new_object);
+            blobs_to_register.insert(new_object.get_id(), new_object);
         }
         self.objects.extend(blobs_to_register);
 

@@ -1,5 +1,7 @@
 use std::error::Error;
 
+use uuid::Uuid;
+
 use kalman_rust::kalman::{
     Kalman2D
 };
@@ -25,6 +27,7 @@ pub trait Blob {
 
 #[derive(Debug)]
 pub struct SimpleBlob {
+    id: Uuid,
     current_bbox: Rect,
     current_center: Point,
     predicted_next_position: Point,
@@ -53,6 +56,7 @@ impl SimpleBlob {
         let std_dev_my = 0.1;
         let kf = Kalman2D::new_with_state(dt, ux, uy, std_dev_a, std_dev_mx, std_dev_my, center_x, center_y);
         SimpleBlob {
+            id: Uuid::new_v4(),
             current_bbox: _current_bbox,
             current_center: Point::new(f32::round(center_x) as i32, f32::round(center_y) as i32),
             predicted_next_position: Point::default(),
@@ -72,6 +76,9 @@ impl SimpleBlob {
     }
     pub fn deactivate(&mut self) {
         self.active = false
+    }
+    pub fn get_id(&self) -> Uuid {
+        self.id
     }
     pub fn get_center(&self) -> Point {
         Point::new(self.current_center.x, self.current_center.y)
@@ -166,6 +173,10 @@ impl SimpleBlob {
                 if self.track.len() > self.max_track_len {
                     self.track = self.track[1..].to_vec();
                 }
+
+                // Last but not least.
+                // There is no exported method to mutate blob's identifier currently
+                self.id = newb.get_id();
             },
             Err(e) => {
                 return Err(format!("Can't update object tracker: {}", e))?;
