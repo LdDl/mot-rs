@@ -55,18 +55,20 @@ impl SimpleBlob {
         let std_dev_mx = 0.1;
         let std_dev_my = 0.1;
         let kf = Kalman2D::new_with_state(dt, ux, uy, std_dev_a, std_dev_mx, std_dev_my, center_x, center_y);
-        SimpleBlob {
+        let mut newb = SimpleBlob {
             id: Uuid::new_v4(),
             current_bbox: _current_bbox,
             current_center: Point::new(f32::round(center_x) as i32, f32::round(center_y) as i32),
             predicted_next_position: Point::default(),
-            track: Vec::new(),
+            track: Vec::with_capacity(150),
             max_track_len: 150,
             active: false,
             no_match_times: 0,
             diagonal: _diagonal,
             tracker: kf
-        }
+        };
+        newb.track.push(newb.current_center.clone());
+        newb
     }
     pub fn new(_current_bbox: Rect) -> Self {
         return SimpleBlob::new_with_dt(_current_bbox, 1.0);

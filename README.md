@@ -34,7 +34,7 @@ Add dependency to your Cargo.toml file
 
 [dependencies]
 ...
-mot-rs = "0.0.8"
+mot-rs = "0.0.9"
 ...
 ```
 
