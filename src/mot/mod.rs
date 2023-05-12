@@ -1,8 +1,10 @@
 //! Export contents of `mot` folder
-mod blob;
+mod simple_blob;
+mod simple_queue;
 mod simple;
 
 pub use self::{
-    blob::*,
+    simple_blob::*,
+    simple_queue::*,
     simple::*,
 };

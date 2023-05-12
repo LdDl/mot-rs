@@ -34,7 +34,7 @@ Add dependency to your Cargo.toml file
 
 [dependencies]
 ...
-mot-rs = "0.0.7"
+mot-rs = "0.0.8"
 ...
 ```
 
@@ -70,13 +70,17 @@ fn main() {
             }
         };
 
+        println!("id;track");
         for object in &mot.objects {
             print!("{};", object.0);
             let track = object.1.get_track();
-            for pt in track {
-                print!("{},{};", pt.x, pt.y);
+            for (idx, pt) in track.iter().enumerate() {
+                if idx == track.len() - 1 {
+                    print!("{},{}", pt.x, pt.y);
+                } else {
+                    print!("{},{}|", pt.x, pt.y);
+                }
             }
-            println!();
             println!();
         }
     }
@@ -86,7 +90,7 @@ fn main() {
 
 If we plot results on a single image we should get something like:
 
-<img src="images/mot_simple.png" width="720">
+<img src="images/mot_simple_naive.png" width="720">
 
 ## References
 - [Implementation of Kalman filter, Dimitrii Lopanov, 2023](https://github.com/LdDl/kalman-rs#implementation-of-discrete-kalman-filter-for-object-tracking-purposes)
