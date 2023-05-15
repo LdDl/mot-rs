@@ -150,35 +150,35 @@ mod tests {
     fn test_match_objects_spread() {
         let bboxes_iterations: Vec<Vec<Rect>> = vec![
             // Each nested vector represents set of bounding boxes on a single frame
-            vec![Rect::new(378,147,173,243)],
-            vec![Rect::new(374,147,180,253)],
-            vec![Rect::new(375,154,178,256)],
-            vec![Rect::new(376,162,177,267)],
-            vec![Rect::new(375,166,178,268)],
-            vec![Rect::new(375,177,186,266)],
-            vec![Rect::new(370,185,197,273)],
-            vec![Rect::new(363,209,203,264)],
-            vec![Rect::new(70,14,227,254), Rect::new(364,214,200,262)],
-            vec![Rect::new(365,218,205,263)],
-            vec![Rect::new(67,23,236,246), Rect::new(366,231,209,260)],
-            vec![Rect::new(73,18,227,264), Rect::new(610,47,324,355), Rect::new(370,238,199,259), Rect::new(381,-1,103,60)],
-            vec![Rect::new(67,16,229,271), Rect::new(370,250,195,264), Rect::new(381,-2,106,58)],
-            vec![Rect::new(62,15,233,268), Rect::new(365,257,205,264), Rect::new(379,-1,109,59)],
-            vec![Rect::new(60,7,234,279), Rect::new(360,269,212,260), Rect::new(380,-1,109,60)],
-            vec![Rect::new(50,41,251,295), Rect::new(619,25,308,399), Rect::new(361,276,215,265), Rect::new(380,-1,110,63)],
-            vec![Rect::new(48,36,242,302), Rect::new(622,21,299,411), Rect::new(357,283,222,255), Rect::new(379,0,113,64)],
-            vec![Rect::new(41,28,245,319), Rect::new(625,31,308,392), Rect::new(350,306,239,231), Rect::new(377,0,116,65)],
-            vec![Rect::new(630,98,294,324), Rect::new(346,310,250,239), Rect::new(378,0,112,65)],
-            vec![Rect::new(636,99,290,323), Rect::new(344,320,254,229), Rect::new(378,2,114,65)],
-            vec![Rect::new(636,103,295,318), Rect::new(347,332,251,211)],
-            vec![Rect::new(362,1,147,90), Rect::new(637,104,292,321), Rect::new(337,344,272,196)],
-            vec![Rect::new(360,-2,152,97), Rect::new(12,74,237,324), Rect::new(639,104,293,316), Rect::new(347,350,258,185)],
-            vec![Rect::new(361,-4,149,99), Rect::new(9,112,251,313), Rect::new(627,106,314,321)],
-            vec![Rect::new(360,-3,151,99), Rect::new(15,115,231,311), Rect::new(633,91,297,346)],
-            vec![Rect::new(362,-7,148,106), Rect::new(10,109,241,320), Rect::new(639,93,294,347)],
-            vec![Rect::new(362,-9,146,109), Rect::new(12,109,233,326), Rect::new(639,95,288,347)],
-            // vec![Rect::new(362,-9,147,111), Rect::new(3,103,236,346), Rect::new(645,98,281,343)], // here one of blobs disappears
-            // vec![Rect::new(365,-10,143,114), Rect::new(645,99,283,345), Rect::new(9,141,238,323)],
+            vec![Rect::new(378.0,147.0,173.0,243.0)],
+            vec![Rect::new(374.0,147.0,180.0,253.0)],
+            vec![Rect::new(375.0,154.0,178.0,256.0)],
+            vec![Rect::new(376.0,162.0,177.0,267.0)],
+            vec![Rect::new(375.0,166.0,178.0,268.0)],
+            vec![Rect::new(375.0,177.0,186.0,266.0)],
+            vec![Rect::new(370.0,185.0,197.0,273.0)],
+            vec![Rect::new(363.0,209.0,203.0,264.0)],
+            vec![Rect::new(70.0,14.0,227.0,254.0), Rect::new(364.0,214.0,200.0,262.0)],
+            vec![Rect::new(365.0,218.0,205.0,263.0)],
+            vec![Rect::new(67.0,23.0,236.0,246.0), Rect::new(366.0,231.0,209.0,260.0)],
+            vec![Rect::new(73.0,18.0,227.0,264.0), Rect::new(610.0,47.0,324.0,355.0), Rect::new(370.0,238.0,199.0,259.0), Rect::new(381.0,-1.0,103.0,60.0)],
+            vec![Rect::new(67.0,16.0,229.0,271.0), Rect::new(370.0,250.0,195.0,264.0), Rect::new(381.0,-2.0,106.0,58.0)],
+            vec![Rect::new(62.0,15.0,233.0,268.0), Rect::new(365.0,257.0,205.0,264.0), Rect::new(379.0,-1.0,109.0,59.0)],
+            vec![Rect::new(60.0,7.0,234.0,279.0), Rect::new(360.0,269.0,212.0,260.0), Rect::new(380.0,-1.0,109.0,60.0)],
+            vec![Rect::new(50.0,41.0,251.0,295.0), Rect::new(619.0,25.0,308.0,399.0), Rect::new(361.0,276.0,215.0,265.0), Rect::new(380.0,-1.0,110.0,63.0)],
+            vec![Rect::new(48.0,36.0,242.0,302.0), Rect::new(622.0,21.0,299.0,411.0), Rect::new(357.0,283.0,222.0,255.0), Rect::new(379.0,0.0,113.0,64.0)],
+            vec![Rect::new(41.0,28.0,245.0,319.0), Rect::new(625.0,31.0,308.0,392.0), Rect::new(350.0,306.0,239.0,231.0), Rect::new(377.0,0.0,116.0,65.0)],
+            vec![Rect::new(630.0,98.0,294.0,324.0), Rect::new(346.0,310.0,250.0,239.0), Rect::new(378.0,0.0,112.0,65.0)],
+            vec![Rect::new(636.0,99.0,290.0,323.0), Rect::new(344.0,320.0,254.0,229.0), Rect::new(378.0,2.0,114.0,65.0)],
+            vec![Rect::new(636.0,103.0,295.0,318.0), Rect::new(347.0,332.0,251.0,211.0)],
+            vec![Rect::new(362.0,1.0,147.0,90.0), Rect::new(637.0,104.0,292.0,321.0), Rect::new(337.0,344.0,272.0,196.0)],
+            vec![Rect::new(360.0,-2.0,152.0,97.0), Rect::new(12.0,74.0,237.0,324.0), Rect::new(639.0,104.0,293.0,316.0), Rect::new(347.0,350.0,258.0,185.0)],
+            vec![Rect::new(361.0,-4.0,149.0,99.0), Rect::new(9.0,112.0,251.0,313.0), Rect::new(627.0,106.0,314.0,321.0)],
+            vec![Rect::new(360.0,-3.0,151.0,99.0), Rect::new(15.0,115.0,231.0,311.0), Rect::new(633.0,91.0,297.0,346.0)],
+            vec![Rect::new(362.0,-7.0,148.0,106.0), Rect::new(10.0,109.0,241.0,320.0), Rect::new(639.0,93.0,294.0,347.0)],
+            vec![Rect::new(362.0,-9.0,146.0,109.0), Rect::new(12.0,109.0,233.0,326.0), Rect::new(639.0,95.0,288.0,347.0)],
+            // vec![Rect::new(362.0,-9.0,147.0,111.0), Rect::new(3.0,103.0,236.0,346.0), Rect::new(645.0,98.0,281.0,343.0)], // here one of blobs disappears
+            // vec![Rect::new(365.0,-10.0,143.0,114.0), Rect::new(645.0,99.0,283.0,345.0), Rect::new(9.0,141.0,238.0,323.0)],
         ];
 
         let mut mot = super::SimpleTracker::new(5, 15.0);
@@ -195,19 +195,22 @@ mod tests {
                 }
             };
         }
-        println!("id;track");
-        for object in &mot.objects {
-            print!("{};", object.0);
-            let track = object.1.get_track();
-            for (idx, pt) in track.iter().enumerate() {
-                if idx == track.len() - 1 {
-                    print!("{},{}", pt.x, pt.y);
-                } else {
-                    print!("{},{}|", pt.x, pt.y);
-                }
-            }
-            println!();
-        }
+        
+        assert_eq!(mot.objects.len(), 4);
+
+        // println!("id;track");
+        // for object in &mot.objects {
+        //     print!("{};", object.0);
+        //     let track = object.1.get_track();
+        //     for (idx, pt) in track.iter().enumerate() {
+        //         if idx == track.len() - 1 {
+        //             print!("{},{}", pt.x, pt.y);
+        //         } else {
+        //             print!("{},{}|", pt.x, pt.y);
+        //         }
+        //     }
+        //     println!();
+        // }
     }
 
     #[test]
@@ -219,9 +222,9 @@ mod tests {
         let dt = 1.0/25.00; // emulate 25 fps
 
         for (bbox_one, bbox_two, bbox_three) in itertools::izip!(bboxes_one, bboxes_two, bboxes_three) {
-            let blob_one = super::SimpleBlob::new_with_dt(Rect::new(bbox_one[0], bbox_one[1], bbox_one[2]-bbox_one[0], bbox_one[3]-bbox_one[1]), dt);
-            let blob_two = super::SimpleBlob::new_with_dt(Rect::new(bbox_two[0],bbox_two[1],bbox_two[2] -bbox_two[0],bbox_two[3]- bbox_two[1]), dt);
-            let blob_three = super::SimpleBlob::new_with_dt(Rect::new(bbox_three[0],bbox_three[1],bbox_three[2] -bbox_three[0],bbox_three[3]- bbox_three[1]), dt);
+            let blob_one = super::SimpleBlob::new_with_dt(Rect::new(bbox_one[0] as f32, bbox_one[1] as f32, (bbox_one[2]-bbox_one[0]) as f32, (bbox_one[3]-bbox_one[1]) as f32), dt);
+            let blob_two = super::SimpleBlob::new_with_dt(Rect::new(bbox_two[0] as f32,bbox_two[1] as f32,(bbox_two[2] -bbox_two[0]) as f32,(bbox_two[3]- bbox_two[1]) as f32), dt);
+            let blob_three = super::SimpleBlob::new_with_dt(Rect::new(bbox_three[0] as f32,bbox_three[1] as f32,(bbox_three[2] -bbox_three[0]) as f32,(bbox_three[3]- bbox_three[1]) as f32), dt);
 
             let mut blobs = vec![blob_one, blob_two, blob_three];
 
@@ -240,6 +243,7 @@ mod tests {
         }
 
         assert_eq!(mot.objects.len(), 3);
+
         // println!("id;track");
         // for object in &mot.objects {
         //     print!("{};", object.0);

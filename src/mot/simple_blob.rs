@@ -58,7 +58,7 @@ impl SimpleBlob {
         let mut newb = SimpleBlob {
             id: Uuid::new_v4(),
             current_bbox: _current_bbox,
-            current_center: Point::new(f32::round(center_x) as i32, f32::round(center_y) as i32),
+            current_center: Point::new(center_x, center_y),
             predicted_next_position: Point::default(),
             track: Vec::with_capacity(150),
             max_track_len: 150,
@@ -113,8 +113,8 @@ impl SimpleBlob {
     pub fn predict_next_position(&mut self) {
         self.tracker.predict();
         let (state_x, state_y) = self.tracker.get_state();
-        self.predicted_next_position.x = f32::round(state_x) as i32;
-        self.predicted_next_position.y = f32::round(state_y) as i32;
+        self.predicted_next_position.x = state_x;
+        self.predicted_next_position.y = state_y;
     }
     // Naive old approach to give an idea what is going on
     // I've saved this method just for retrospective
@@ -122,28 +122,28 @@ impl SimpleBlob {
         let track_len = self.track.len();
         let depth = usize::min(_depth, track_len);
         if depth <= 1 {
-            self.predicted_next_position.x = 0;
-            self.predicted_next_position.y = 0;
+            self.predicted_next_position.x = 0.0;
+            self.predicted_next_position.y = 0.0;
             return
         }
         let mut current = track_len - 1;
         let mut prev = current - 1;
-        let mut delta_x = 0;
-        let mut delta_y = 0;
-        let mut sum = 0;
+        let mut delta_x = 0.0;
+        let mut delta_y = 0.0;
+        let mut sum = 0.0;
         for i in 1..depth {
-            let weight = (depth - i) as i32;
+            let weight = (depth - i) as f32;
             delta_x += (self.track[current].x - self.track[prev].x) * weight;
 		    delta_y += (self.track[current].y - self.track[prev].y) * weight;
-            sum += i as i32;
+            sum += i as f32;
             current = prev;
             if current != 0 {
                 prev = current - 1;
             }
         }
-        if sum > 0 {
-            delta_x = f32::round(delta_x as f32 / sum as f32) as i32;
-            delta_y = f32::round(delta_y as f32 / sum as f32) as i32;
+        if sum > 0.0 {
+            delta_x = delta_x / sum;
+            delta_y = delta_y / sum;
         }
         self.predicted_next_position.x = self.track[track_len - 1].x + delta_x;
         self.predicted_next_position.y = self.track[track_len - 1].y + delta_y;
@@ -161,8 +161,8 @@ impl SimpleBlob {
                 let (state_x, state_y) = self.tracker.get_state();
                 let old_x = self.current_center.x;
                 let old_y = self.current_center.y;
-                self.current_center.x = f32::round(state_x) as i32;
-                self.current_center.y = f32::round(state_y) as i32;
+                self.current_center.x = state_x;
+                self.current_center.y = state_y;
                 let diff_x = self.current_center.x - old_x;
                 let diff_y = self.current_center.y - old_y;
                 self.current_bbox = Rect::new(
