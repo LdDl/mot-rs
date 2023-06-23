@@ -7,12 +7,12 @@ pub struct Rect {
 }
 
 impl Rect {
-    pub fn new(_x: f32, _y: f32, _height: f32, _width: f32) -> Self {
+    pub fn new(_x: f32, _y: f32, _width: f32, _height: f32) -> Self {
         Rect {
             x: _x,
             y: _y,
-            width: _height,
-            height: _width
+            width: _width,
+            height: _height
         }
     }
 }
