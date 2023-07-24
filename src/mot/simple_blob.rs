@@ -70,6 +70,33 @@ impl SimpleBlob {
         newb.track.push(newb.current_center.clone());
         newb
     }
+    pub fn new_with_center_dt(_current_center: Point, _current_bbox: Rect, dt: f32) -> Self {
+        let _diagonal = f32::sqrt((_current_bbox.width*_current_bbox.width) as f32 + (_current_bbox.height*_current_bbox.height) as f32);
+        /* Kalman filter props */
+        //
+        // Why set initial state at all? See answer here: https://github.com/LdDl/kalman-rs/blob/master/src/kalman/kalman_2d.rs#L126
+        //
+        let ux = 1.0;
+        let uy = 1.0;
+        let std_dev_a = 2.0;
+        let std_dev_mx = 0.1;
+        let std_dev_my = 0.1;
+        let kf = Kalman2D::new_with_state(dt, ux, uy, std_dev_a, std_dev_mx, std_dev_my, _current_center.x, _current_center.y);
+        let mut newb = SimpleBlob {
+            id: Uuid::new_v4(),
+            current_bbox: _current_bbox,
+            current_center: _current_center,
+            predicted_next_position: Point::default(),
+            track: Vec::with_capacity(150),
+            max_track_len: 150,
+            active: false,
+            no_match_times: 0,
+            diagonal: _diagonal,
+            tracker: kf
+        };
+        newb.track.push(newb.current_center.clone());
+        newb
+    }
     pub fn new(_current_bbox: Rect) -> Self {
         return SimpleBlob::new_with_dt(_current_bbox, 1.0);
     }
