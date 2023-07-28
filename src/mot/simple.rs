@@ -77,7 +77,7 @@ impl SimpleTracker {
                 }
             }
             let distance_blob = DistanceBlob {
-                distance: min_distance,
+                distance_metric_value: min_distance,
                 min_id: min_id,
                 blob: new_object,
             };
@@ -88,7 +88,7 @@ impl SimpleTracker {
         let mut reserved_objects: HashSet<Uuid> = HashSet::new();
 
         while let Some(mut distance_blob) = priority_queue.pop() {
-            let min_distance = distance_blob.distance;
+            let min_distance = distance_blob.distance_metric_value;
             let min_id = distance_blob.min_id;
 
             // Check if object is already reserved
