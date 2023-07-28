@@ -111,7 +111,7 @@ impl SimpleTracker {
                     },
                     None => {
                         // continue
-                        panic!("immposible self.objects.get_mut(&min_id)")
+                        panic!("immposible self.objects.get_mut(&min_id). Object ID {:?}. Distance value: {:?}", min_id, min_distance);
                     }
                 };
             } else {
@@ -144,41 +144,39 @@ impl fmt::Display for SimpleTracker {
 }
 
 mod tests {
-    use crate::utils::Rect;
-    use std::collections::BinaryHeap;
     #[test]
     fn test_match_objects_spread() {
-        let bboxes_iterations: Vec<Vec<Rect>> = vec![
+        let bboxes_iterations: Vec<Vec<crate::utils::Rect>> = vec![
             // Each nested vector represents set of bounding boxes on a single frame
-            vec![Rect::new(378.0,147.0,173.0,243.0)],
-            vec![Rect::new(374.0,147.0,180.0,253.0)],
-            vec![Rect::new(375.0,154.0,178.0,256.0)],
-            vec![Rect::new(376.0,162.0,177.0,267.0)],
-            vec![Rect::new(375.0,166.0,178.0,268.0)],
-            vec![Rect::new(375.0,177.0,186.0,266.0)],
-            vec![Rect::new(370.0,185.0,197.0,273.0)],
-            vec![Rect::new(363.0,209.0,203.0,264.0)],
-            vec![Rect::new(70.0,14.0,227.0,254.0), Rect::new(364.0,214.0,200.0,262.0)],
-            vec![Rect::new(365.0,218.0,205.0,263.0)],
-            vec![Rect::new(67.0,23.0,236.0,246.0), Rect::new(366.0,231.0,209.0,260.0)],
-            vec![Rect::new(73.0,18.0,227.0,264.0), Rect::new(610.0,47.0,324.0,355.0), Rect::new(370.0,238.0,199.0,259.0), Rect::new(381.0,-1.0,103.0,60.0)],
-            vec![Rect::new(67.0,16.0,229.0,271.0), Rect::new(370.0,250.0,195.0,264.0), Rect::new(381.0,-2.0,106.0,58.0)],
-            vec![Rect::new(62.0,15.0,233.0,268.0), Rect::new(365.0,257.0,205.0,264.0), Rect::new(379.0,-1.0,109.0,59.0)],
-            vec![Rect::new(60.0,7.0,234.0,279.0), Rect::new(360.0,269.0,212.0,260.0), Rect::new(380.0,-1.0,109.0,60.0)],
-            vec![Rect::new(50.0,41.0,251.0,295.0), Rect::new(619.0,25.0,308.0,399.0), Rect::new(361.0,276.0,215.0,265.0), Rect::new(380.0,-1.0,110.0,63.0)],
-            vec![Rect::new(48.0,36.0,242.0,302.0), Rect::new(622.0,21.0,299.0,411.0), Rect::new(357.0,283.0,222.0,255.0), Rect::new(379.0,0.0,113.0,64.0)],
-            vec![Rect::new(41.0,28.0,245.0,319.0), Rect::new(625.0,31.0,308.0,392.0), Rect::new(350.0,306.0,239.0,231.0), Rect::new(377.0,0.0,116.0,65.0)],
-            vec![Rect::new(630.0,98.0,294.0,324.0), Rect::new(346.0,310.0,250.0,239.0), Rect::new(378.0,0.0,112.0,65.0)],
-            vec![Rect::new(636.0,99.0,290.0,323.0), Rect::new(344.0,320.0,254.0,229.0), Rect::new(378.0,2.0,114.0,65.0)],
-            vec![Rect::new(636.0,103.0,295.0,318.0), Rect::new(347.0,332.0,251.0,211.0)],
-            vec![Rect::new(362.0,1.0,147.0,90.0), Rect::new(637.0,104.0,292.0,321.0), Rect::new(337.0,344.0,272.0,196.0)],
-            vec![Rect::new(360.0,-2.0,152.0,97.0), Rect::new(12.0,74.0,237.0,324.0), Rect::new(639.0,104.0,293.0,316.0), Rect::new(347.0,350.0,258.0,185.0)],
-            vec![Rect::new(361.0,-4.0,149.0,99.0), Rect::new(9.0,112.0,251.0,313.0), Rect::new(627.0,106.0,314.0,321.0)],
-            vec![Rect::new(360.0,-3.0,151.0,99.0), Rect::new(15.0,115.0,231.0,311.0), Rect::new(633.0,91.0,297.0,346.0)],
-            vec![Rect::new(362.0,-7.0,148.0,106.0), Rect::new(10.0,109.0,241.0,320.0), Rect::new(639.0,93.0,294.0,347.0)],
-            vec![Rect::new(362.0,-9.0,146.0,109.0), Rect::new(12.0,109.0,233.0,326.0), Rect::new(639.0,95.0,288.0,347.0)],
-            // vec![Rect::new(362.0,-9.0,147.0,111.0), Rect::new(3.0,103.0,236.0,346.0), Rect::new(645.0,98.0,281.0,343.0)], // here one of blobs disappears
-            // vec![Rect::new(365.0,-10.0,143.0,114.0), Rect::new(645.0,99.0,283.0,345.0), Rect::new(9.0,141.0,238.0,323.0)],
+            vec![crate::utils::Rect::new(378.0,147.0,173.0,243.0)],
+            vec![crate::utils::Rect::new(374.0,147.0,180.0,253.0)],
+            vec![crate::utils::Rect::new(375.0,154.0,178.0,256.0)],
+            vec![crate::utils::Rect::new(376.0,162.0,177.0,267.0)],
+            vec![crate::utils::Rect::new(375.0,166.0,178.0,268.0)],
+            vec![crate::utils::Rect::new(375.0,177.0,186.0,266.0)],
+            vec![crate::utils::Rect::new(370.0,185.0,197.0,273.0)],
+            vec![crate::utils::Rect::new(363.0,209.0,203.0,264.0)],
+            vec![crate::utils::Rect::new(70.0,14.0,227.0,254.0), crate::utils::Rect::new(364.0,214.0,200.0,262.0)],
+            vec![crate::utils::Rect::new(365.0,218.0,205.0,263.0)],
+            vec![crate::utils::Rect::new(67.0,23.0,236.0,246.0), crate::utils::Rect::new(366.0,231.0,209.0,260.0)],
+            vec![crate::utils::Rect::new(73.0,18.0,227.0,264.0), crate::utils::Rect::new(610.0,47.0,324.0,355.0), crate::utils::Rect::new(370.0,238.0,199.0,259.0), crate::utils::Rect::new(381.0,-1.0,103.0,60.0)],
+            vec![crate::utils::Rect::new(67.0,16.0,229.0,271.0), crate::utils::Rect::new(370.0,250.0,195.0,264.0), crate::utils::Rect::new(381.0,-2.0,106.0,58.0)],
+            vec![crate::utils::Rect::new(62.0,15.0,233.0,268.0), crate::utils::Rect::new(365.0,257.0,205.0,264.0), crate::utils::Rect::new(379.0,-1.0,109.0,59.0)],
+            vec![crate::utils::Rect::new(60.0,7.0,234.0,279.0), crate::utils::Rect::new(360.0,269.0,212.0,260.0), crate::utils::Rect::new(380.0,-1.0,109.0,60.0)],
+            vec![crate::utils::Rect::new(50.0,41.0,251.0,295.0), crate::utils::Rect::new(619.0,25.0,308.0,399.0), crate::utils::Rect::new(361.0,276.0,215.0,265.0), crate::utils::Rect::new(380.0,-1.0,110.0,63.0)],
+            vec![crate::utils::Rect::new(48.0,36.0,242.0,302.0), crate::utils::Rect::new(622.0,21.0,299.0,411.0), crate::utils::Rect::new(357.0,283.0,222.0,255.0), crate::utils::Rect::new(379.0,0.0,113.0,64.0)],
+            vec![crate::utils::Rect::new(41.0,28.0,245.0,319.0), crate::utils::Rect::new(625.0,31.0,308.0,392.0), crate::utils::Rect::new(350.0,306.0,239.0,231.0), crate::utils::Rect::new(377.0,0.0,116.0,65.0)],
+            vec![crate::utils::Rect::new(630.0,98.0,294.0,324.0), crate::utils::Rect::new(346.0,310.0,250.0,239.0), crate::utils::Rect::new(378.0,0.0,112.0,65.0)],
+            vec![crate::utils::Rect::new(636.0,99.0,290.0,323.0), crate::utils::Rect::new(344.0,320.0,254.0,229.0), crate::utils::Rect::new(378.0,2.0,114.0,65.0)],
+            vec![crate::utils::Rect::new(636.0,103.0,295.0,318.0), crate::utils::Rect::new(347.0,332.0,251.0,211.0)],
+            vec![crate::utils::Rect::new(362.0,1.0,147.0,90.0), crate::utils::Rect::new(637.0,104.0,292.0,321.0), crate::utils::Rect::new(337.0,344.0,272.0,196.0)],
+            vec![crate::utils::Rect::new(360.0,-2.0,152.0,97.0), crate::utils::Rect::new(12.0,74.0,237.0,324.0), crate::utils::Rect::new(639.0,104.0,293.0,316.0), crate::utils::Rect::new(347.0,350.0,258.0,185.0)],
+            vec![crate::utils::Rect::new(361.0,-4.0,149.0,99.0), crate::utils::Rect::new(9.0,112.0,251.0,313.0), crate::utils::Rect::new(627.0,106.0,314.0,321.0)],
+            vec![crate::utils::Rect::new(360.0,-3.0,151.0,99.0), crate::utils::Rect::new(15.0,115.0,231.0,311.0), crate::utils::Rect::new(633.0,91.0,297.0,346.0)],
+            vec![crate::utils::Rect::new(362.0,-7.0,148.0,106.0), crate::utils::Rect::new(10.0,109.0,241.0,320.0), crate::utils::Rect::new(639.0,93.0,294.0,347.0)],
+            vec![crate::utils::Rect::new(362.0,-9.0,146.0,109.0), crate::utils::Rect::new(12.0,109.0,233.0,326.0), crate::utils::Rect::new(639.0,95.0,288.0,347.0)],
+            // vec![crate::utils::Rect::new(362.0,-9.0,147.0,111.0), crate::utils::Rect::new(3.0,103.0,236.0,346.0), crate::utils::Rect::new(645.0,98.0,281.0,343.0)], // here one of blobs disappears
+            // vec![crate::utils::Rect::new(365.0,-10.0,143.0,114.0), crate::utils::Rect::new(645.0,99.0,283.0,345.0), crate::utils::Rect::new(9.0,141.0,238.0,323.0)],
         ];
 
         let mut mot = super::SimpleTracker::new(5, 15.0);
@@ -222,9 +220,9 @@ mod tests {
         let dt = 1.0/25.00; // emulate 25 fps
 
         for (bbox_one, bbox_two, bbox_three) in itertools::izip!(bboxes_one, bboxes_two, bboxes_three) {
-            let blob_one = super::SimpleBlob::new_with_dt(Rect::new(bbox_one[0] as f32, bbox_one[1] as f32, (bbox_one[2]-bbox_one[0]) as f32, (bbox_one[3]-bbox_one[1]) as f32), dt);
-            let blob_two = super::SimpleBlob::new_with_dt(Rect::new(bbox_two[0] as f32,bbox_two[1] as f32,(bbox_two[2] -bbox_two[0]) as f32,(bbox_two[3]- bbox_two[1]) as f32), dt);
-            let blob_three = super::SimpleBlob::new_with_dt(Rect::new(bbox_three[0] as f32,bbox_three[1] as f32,(bbox_three[2] -bbox_three[0]) as f32,(bbox_three[3]- bbox_three[1]) as f32), dt);
+            let blob_one = super::SimpleBlob::new_with_dt(crate::utils::Rect::new(bbox_one[0] as f32, bbox_one[1] as f32, (bbox_one[2]-bbox_one[0]) as f32, (bbox_one[3]-bbox_one[1]) as f32), dt);
+            let blob_two = super::SimpleBlob::new_with_dt(crate::utils::Rect::new(bbox_two[0] as f32,bbox_two[1] as f32,(bbox_two[2] -bbox_two[0]) as f32,(bbox_two[3]- bbox_two[1]) as f32), dt);
+            let blob_three = super::SimpleBlob::new_with_dt(crate::utils::Rect::new(bbox_three[0] as f32,bbox_three[1] as f32,(bbox_three[2] -bbox_three[0]) as f32,(bbox_three[3]- bbox_three[1]) as f32), dt);
 
             let mut blobs = vec![blob_one, blob_two, blob_three];
 

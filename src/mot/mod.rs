@@ -8,4 +8,5 @@ pub use self::{
     simple_blob::*,
     simple_queue::*,
     simple::*,
+    iou_tracker::*,
 };
