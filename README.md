@@ -24,6 +24,10 @@ Yes, I do think so. I guess that [SORT](https://arxiv.org/abs/1602.00763) will b
 
 If you want to you can contribute via opening [Pull Request](https://github.com/LdDl/mot-rs/compare)
 
+I've implemented two metrics to match objects:
+* [Centroids distance + diagonal](src/mot/simple.rs#L56)
+* [IoU](src/mot/iou_tracker.rs#L58)
+
 ## How to use
 
 Add dependency to your Cargo.toml file
@@ -34,7 +38,7 @@ Add dependency to your Cargo.toml file
 
 [dependencies]
 ...
-mot-rs = "0.0.10"
+mot-rs = "0.1.0"
 ...
 ```
 
