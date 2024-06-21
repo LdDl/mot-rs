@@ -1,4 +1,3 @@
-use std::error::Error;
 use std::cmp::Reverse;
 use std::collections::{
     HashMap,
@@ -7,6 +6,7 @@ use std::collections::{
 };
 
 use uuid::Uuid;
+use crate::mot::mot_errors;
 use crate::mot::DistanceBlob;
 use crate::mot::SimpleBlob;
 use crate::utils::iou;
@@ -55,7 +55,7 @@ impl IoUTracker {
         }
     }
     // Matches new objects to existing ones
-    pub fn match_objects(&mut self, new_objects: &mut Vec<SimpleBlob>) -> Result<(), Box<dyn Error>>{
+    pub fn match_objects(&mut self, new_objects: &mut Vec<SimpleBlob>) -> Result<(), mot_errors::TrackerError>{
         for (_, object) in self.objects.iter_mut() {
             object.deactivate(); // Make sure that object is marked as deactivated
             // object.predict_next_position_naive(5);
@@ -87,7 +87,7 @@ impl IoUTracker {
         // We need to prevent double update of objects
         let mut reserved_objects: HashSet<Uuid> = HashSet::new();
 
-        while let Some(mut distance_blob) = priority_queue.pop() {
+        while let Some(distance_blob) = priority_queue.pop() {
             let max_iou = distance_blob.0.distance_metric_value;
             let min_id = distance_blob.0.min_id;
 
@@ -110,8 +110,7 @@ impl IoUTracker {
                         reserved_objects.insert(min_id);
                     },
                     None => {
-                        // continue
-                        panic!("immposible self.objects.get_mut(&min_id). Object ID {:?}. IoU value: {:?}", min_id, max_iou);
+                        return Err(mot_errors::TrackerError::from(mot_errors::NoObjectInTracker{txt: format!("immposible self.objects.get_mut(&min_id). Object ID {:?}. IoU value: {:?}", min_id, max_iou)}));
                     }
                 };
             } else {

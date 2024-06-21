@@ -1,20 +1,12 @@
-use std::error::Error;
-
 use uuid::Uuid;
 
-use kalman_rust::kalman::{
-    Kalman2D
-};
+use kalman_rust::kalman::Kalman2D;
 
+use crate::mot::mot_errors;
 use crate::utils::{
     Rect,
     Point,
     euclidean_distance
-};
-
-use chrono::{
-    DateTime,
-    Utc
 };
 
 pub trait Blob {
@@ -176,43 +168,39 @@ impl SimpleBlob {
         self.predicted_next_position.y = self.track[track_len - 1].y + delta_y;
     }
     // Update blobs position and execute Kalman filter's second step (evalute state vector based on Kalman gain)
-    pub fn update(&mut self, newb: &SimpleBlob) -> Result<(), Box<dyn Error>> {
+    pub fn update(&mut self, newb: &SimpleBlob) -> Result<(), mot_errors::TrackerError> {
         // Update center
         self.current_center = newb.current_center.to_owned();
         self.current_bbox = newb.current_bbox.to_owned();
 
         // Smooth center via Kalman filter.
-        match self.tracker.update(newb.current_center.x as f32, newb.current_center.y as f32) {
-            Ok(_) =>{
-                // Update center and re-evaluate bounding box
-                let (state_x, state_y) = self.tracker.get_state();
-                let old_x = self.current_center.x;
-                let old_y = self.current_center.y;
-                self.current_center.x = state_x;
-                self.current_center.y = state_y;
-                let diff_x = self.current_center.x - old_x;
-                let diff_y = self.current_center.y - old_y;
-                self.current_bbox = Rect::new(
-                    self.current_bbox.x - diff_x,
-                    self.current_bbox.y - diff_y,
-                    self.current_bbox.width - diff_x,
-                    self.current_bbox.height - diff_y
-                );
-                // Update remaining properties
-                self.diagonal = newb.diagonal;
-                self.active = true;
-                self.no_match_times = 0;
+        self.tracker.update(newb.current_center.x as f32, newb.current_center.y as f32)?;
 
-                // Update track
-                self.track.push(self.current_center.clone());
-                if self.track.len() > self.max_track_len {
-                    self.track = self.track[1..].to_vec();
-                }
-            },
-            Err(e) => {
-                return Err(format!("Can't update object tracker: {}", e))?;
-            }
-        };
+        // Update center and re-evaluate bounding box
+        let (state_x, state_y) = self.tracker.get_state();
+        let old_x = self.current_center.x;
+        let old_y = self.current_center.y;
+        self.current_center.x = state_x;
+        self.current_center.y = state_y;
+        let diff_x = self.current_center.x - old_x;
+        let diff_y = self.current_center.y - old_y;
+        self.current_bbox = Rect::new(
+            self.current_bbox.x - diff_x,
+            self.current_bbox.y - diff_y,
+            self.current_bbox.width - diff_x,
+            self.current_bbox.height - diff_y
+        );
+        // Update remaining properties
+        self.diagonal = newb.diagonal;
+        self.active = true;
+        self.no_match_times = 0;
+
+        // Update track
+        self.track.push(self.current_center.clone());
+        if self.track.len() > self.max_track_len {
+            self.track = self.track[1..].to_vec();
+        }
+
         Ok(())
     }
     pub fn distance_to(&self, b: &SimpleBlob) -> f32 {

@@ -35,22 +35,22 @@ mod tests {
     #[test]
     fn test_min_heap() {
         let mut priority_queue: std::collections::BinaryHeap<super::DistanceBlob> = std::collections::BinaryHeap::new();
-        let mut blob1 = super::DistanceBlob {
+        let blob1 = super::DistanceBlob {
             distance_metric_value: 1.0,
             min_id: uuid::Uuid::new_v4(),
             blob: &mut crate::mot::SimpleBlob::new(crate::utils::Rect::new(0.0, 0.0, 1.0, 1.0)),
         };
-        let mut blob2 = super::DistanceBlob {
+        let blob2 = super::DistanceBlob {
             distance_metric_value: 2.0,
             min_id: uuid::Uuid::new_v4(),
             blob: &mut crate::mot::SimpleBlob::new(crate::utils::Rect::new(0.0, 0.0, 1.0, 1.0)),
         };
-        let mut blob3 = super::DistanceBlob {
+        let blob3 = super::DistanceBlob {
             distance_metric_value: 3.0,
             min_id: uuid::Uuid::new_v4(),
             blob: &mut crate::mot::SimpleBlob::new(crate::utils::Rect::new(0.0, 0.0, 1.0, 1.0)),
         };
-        let mut blob4 = super::DistanceBlob {
+        let blob4 = super::DistanceBlob {
             distance_metric_value: 4.0,
             min_id: uuid::Uuid::new_v4(),
             blob: &mut crate::mot::SimpleBlob::new(crate::utils::Rect::new(0.0, 0.0, 1.0, 1.0)),
@@ -69,22 +69,22 @@ mod tests {
     #[test]
     fn test_max_heap() {
         let mut priority_queue: std::collections::BinaryHeap<std::cmp::Reverse<super::DistanceBlob>> = std::collections::BinaryHeap::new();
-        let mut blob1 = super::DistanceBlob {
+        let blob1 = super::DistanceBlob {
             distance_metric_value: 1.0,
             min_id: uuid::Uuid::new_v4(),
             blob: &mut crate::mot::SimpleBlob::new(crate::utils::Rect::new(0.0, 0.0, 1.0, 1.0)),
         };
-        let mut blob2 = super::DistanceBlob {
+        let blob2 = super::DistanceBlob {
             distance_metric_value: 2.0,
             min_id: uuid::Uuid::new_v4(),
             blob: &mut crate::mot::SimpleBlob::new(crate::utils::Rect::new(0.0, 0.0, 1.0, 1.0)),
         };
-        let mut blob3 = super::DistanceBlob {
+        let blob3 = super::DistanceBlob {
             distance_metric_value: 3.0,
             min_id: uuid::Uuid::new_v4(),
             blob: &mut crate::mot::SimpleBlob::new(crate::utils::Rect::new(0.0, 0.0, 1.0, 1.0)),
         };
-        let mut blob4 = super::DistanceBlob {
+        let blob4 = super::DistanceBlob {
             distance_metric_value: 4.0,
             min_id: uuid::Uuid::new_v4(),
             blob: &mut crate::mot::SimpleBlob::new(crate::utils::Rect::new(0.0, 0.0, 1.0, 1.0)),
