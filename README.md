@@ -8,6 +8,7 @@
 
 ## About
 
+
 **Why is it even exists when there are a lot of other solutions (better perfomance, better logic, better overall and etc.)?**
 
 It is simple as that: 
@@ -18,15 +19,28 @@ It is simple as that:
 
 You can use this library to track vehicles / peoples and etc. when you don't need that much accuracy or ReID.
 
+**What Multi-Object tracking algorithms are implemented?**
+- Centroids distance + diagonal - [src/mot/simple.rs#L56](src/mot/simple.rs#L56)
+- IoU - [src/mot/iou_tracker.rs#L58](src/mot/iou_tracker.rs#L58)
+- [ByteTrack](https://arxiv.org/abs/2110.06864) using greedy matching algorithm - [src/mot/bytetrack.rs#L58](src/mot/bytetrack.rs#L258)
+- [ByteTrack](https://arxiv.org/abs/2110.06864) using [Hungarian algorithm](https://en.wikipedia.org/wiki/Hungarian_algorithm) via [pathfinding crate](https://docs.rs/pathfinding/latest/pathfinding/) - [src/mot/bytetrack.rs#L58](src/mot/bytetrack.rs#L230)
+
 **Are more advanced algorithms considered to be implemented in futher?**
 
 Yes, I do think so. I guess that [SORT](https://arxiv.org/abs/1602.00763) will be the next one.
 
 If you want to you can contribute via opening [Pull Request](https://github.com/LdDl/mot-rs/compare)
 
-I've implemented two metrics to match objects:
-* [Centroids distance + diagonal](src/mot/simple.rs#L56)
-* [IoU](src/mot/iou_tracker.rs#L58)
+
+**Some examples**
+Simple centroid IoU tracker for three simple tracks |  ByteTrack + Hungarian algorithm for three simple tracks
+:-------------------------:|:-------------------------:
+<img src="images/mot_simple_naive.png" width="480">  |  <img src="images/mot_simple_bytetrack_naive.png" width="480">
+
+Simple centroid IoU tracker for spread tracks |  ByteTrack + Hungarian algorithm for spread tracks
+:-------------------------:|:-------------------------:
+<img src="images/mot_simple_spread.png" width="480">  |  <img src="images/mot_simple_bytetrack_spread.png" width="480">
+
 
 ## How to use
 
@@ -38,7 +52,7 @@ Add dependency to your Cargo.toml file
 
 [dependencies]
 ...
-mot-rs = "0.1.0"
+mot-rs = "0.2.0"
 ...
 ```
 

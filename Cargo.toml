@@ -4,7 +4,7 @@ repository = "https://github.com/LdDl/mot-rs"
 readme = "README.md"
 keywords = ["computer-vision", "kalman", "tracking", "filtering"]
 license = "MIT"
-version = "0.1.2"
+version = "0.2.0"
 edition = "2021"
 authors = ["Dimitrii Lopanov <sexykdi@gmail.com>"]
 exclude = ["/.github", "/ci", "/tools", "release.toml", "rustfmt.toml"]
@@ -20,3 +20,4 @@ kalman-rust = "0.2.3"
 uuid = { version = "1.5.0", features = ["serde", "v4"] }
 chrono = "0.4.31"
 itertools = "0.11.0"
+pathfinding = "4.14.0"
