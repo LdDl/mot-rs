@@ -27,6 +27,7 @@ pub enum MatchingAlgorithm {
 
 /// Straightforward implementation of Multi-object tracker (MOT) called ByteTrack.
 pub struct ByteTracker {
+    /// Maximum number of frames an object can be missing before it is removed
     max_disappeared: usize,
     /// Maximum distance between two objects to be considered the same
     min_iou: f32,
@@ -204,7 +205,7 @@ impl ByteTracker {
         Ok(())
         
     }
-    /// Updates the tracker with new detections.
+    /// Returns a vec of active tracks.
     /// 
     pub fn get_active_tracks(&self) -> Vec<&SimpleBlob> {
         self.objects.iter()
