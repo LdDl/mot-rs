@@ -22,8 +22,8 @@ You can use this library to track vehicles / peoples and etc. when you don't nee
 **What Multi-Object tracking algorithms are implemented?**
 - Centroids distance + diagonal - [src/mot/simple.rs#L56](src/mot/simple.rs#L56)
 - IoU - [src/mot/iou_tracker.rs#L58](src/mot/iou_tracker.rs#L58)
-- [ByteTrack](https://arxiv.org/abs/2110.06864) using greedy matching algorithm - [src/mot/bytetrack.rs#L58](src/mot/bytetrack.rs#L258)
-- [ByteTrack](https://arxiv.org/abs/2110.06864) using [Hungarian algorithm](https://en.wikipedia.org/wiki/Hungarian_algorithm) via [pathfinding crate](https://docs.rs/pathfinding/latest/pathfinding/) - [src/mot/bytetrack.rs#L58](src/mot/bytetrack.rs#L230)
+- [ByteTrack](https://arxiv.org/abs/2110.06864) using greedy matching algorithm - [src/mot/bytetrack.rs#L260](src/mot/bytetrack.rs#L260)
+- [ByteTrack](https://arxiv.org/abs/2110.06864) using [Hungarian algorithm](https://en.wikipedia.org/wiki/Hungarian_algorithm) via [pathfinding crate](https://docs.rs/pathfinding/latest/pathfinding/) - [src/mot/bytetrack.rs#L233](src/mot/bytetrack.rs#L233)
 
 **Are more advanced algorithms considered to be implemented in futher?**
 
