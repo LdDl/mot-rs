@@ -231,31 +231,32 @@ impl ByteTracker {
     fn perform_matching(&self, iou_matrix: &[Vec<f32>], track_bboxes: &[(Uuid, Rect)], detection_indices: &[usize]) -> Vec<(usize, usize)> {
         match self.algorithm {
             MatchingAlgorithm::Hungarian => {
-                // Check if rows <= columns requirement is met for Hungarian
-                if track_bboxes.len() > detection_indices.len() {
-                    // Fall back to greedy if we have more tracks than detections
-                    self.perform_greedy_matching(iou_matrix, track_bboxes, detection_indices)
-                } else {
-                    // Convert IoU matrix to cost matrix
-                    let cost_data: Vec<i32> = iou_matrix.iter()
-                        .flat_map(|row| row.iter().map(|&iou_val| ((1.0 - iou_val) * SCALE_FACTOR) as i32))
-                        .collect();
-                    // let cost_data_f32: Vec<f32> = iou_matrix.iter()
-                    //     .flat_map(|row| row.iter().map(|&iou_val| iou_val))
-                    //     .collect();
-                    // println!("Cost data: {:?}", cost_data);
-                    // println!("Cost data f32: {:?}", cost_data_f32);
-                    let cost_matrix = match Matrix::from_vec(track_bboxes.len(), detection_indices.len(), cost_data) {
-                        Ok(matrix) => matrix,
-                        Err(_) => return Vec::new(), // Return empty matches on error
-                    };
-                    // Apply Hungarian algorithm
-                    let (_, assignments) = kuhn_munkres_min(&cost_matrix);
-                    // Convert assignments to (track_idx, det_idx) pairs
-                    assignments.iter().enumerate()
-                        .map(|(track_idx, &det_idx)| (track_idx, det_idx))
-                        .collect()
-                }
+                let num_tracks = track_bboxes.len();
+                let num_detections = detection_indices.len();
+                // Ensure we have at least as many columns as rows for Hungarian
+                let padded_cols = num_tracks.max(num_detections);
+                // Create padded cost matrix
+                let cost_data: Vec<i32> = (0..num_tracks).flat_map(|i| {
+                    (0..padded_cols).map(|j| {
+                        if j < num_detections {
+                            // Real IoU value
+                            ((1.0 - iou_matrix[i][j]) * SCALE_FACTOR) as i32
+                        } else {
+                            // Dummy detection - very high cost (low IoU)
+                            (SCALE_FACTOR) as i32  // Cost of 1.0 (IoU of 0.0)
+                        }
+                    }).collect::<Vec<_>>()
+                }).collect();
+                let cost_matrix = match Matrix::from_vec(num_tracks, padded_cols, cost_data) {
+                    Ok(matrix) => matrix,
+                    Err(_) => return Vec::new(), // Return empty matches on error
+                };
+                let (_, assignments) = kuhn_munkres_min(&cost_matrix);
+                // Filter out dummy assignments
+                assignments.iter().enumerate()
+                    .filter(|(_, &det_idx)| det_idx < num_detections)
+                    .map(|(track_idx, &det_idx)| (track_idx, det_idx))
+                    .collect()
             },
             MatchingAlgorithm::Greedy => {
                 self.perform_greedy_matching(iou_matrix, track_bboxes, detection_indices)
@@ -404,19 +405,19 @@ mod tests {
         
         assert_eq!(mot.objects.len(), 4);
 
-        // println!("id;track");
-        // for object in &mot.objects {
-        //     print!("{};", object.0);
-        //     let track = object.1.get_track();
-        //     for (idx, pt) in track.iter().enumerate() {
-        //         if idx == track.len() - 1 {
-        //             print!("{},{}", pt.x, pt.y);
-        //         } else {
-        //             print!("{},{}|", pt.x, pt.y);
-        //         }
-        //     }
-        //     println!();
-        // }
+        println!("id;track");
+        for object in &mot.objects {
+            print!("{};", object.0);
+            let track = object.1.get_track();
+            for (idx, pt) in track.iter().enumerate() {
+                if idx == track.len() - 1 {
+                    print!("{},{}", pt.x, pt.y);
+                } else {
+                    print!("{},{}|", pt.x, pt.y);
+                }
+            }
+            println!();
+        }
     }
 
     #[test]
@@ -458,18 +459,18 @@ mod tests {
 
         assert_eq!(tracker.objects.len(), 3);
         
-        println!("id;track");
-        for object in &tracker.objects {
-            print!("{};", object.0);
-            let track = object.1.get_track();
-            for (idx, pt) in track.iter().enumerate() {
-                if idx == track.len() - 1 {
-                    print!("{},{}", pt.x, pt.y);
-                } else {
-                    print!("{},{}|", pt.x, pt.y);
-                }
-            }
-            println!();
-        }
+        // println!("id;track");
+        // for object in &tracker.objects {
+        //     print!("{};", object.0);
+        //     let track = object.1.get_track();
+        //     for (idx, pt) in track.iter().enumerate() {
+        //         if idx == track.len() - 1 {
+        //             print!("{},{}", pt.x, pt.y);
+        //         } else {
+        //             print!("{},{}|", pt.x, pt.y);
+        //         }
+        //     }
+        //     println!();
+        // }
     }
 }
