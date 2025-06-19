@@ -28,7 +28,7 @@ pub struct SimpleBlob {
     active: bool,
     no_match_times: usize,
     diagonal: f32,
-    tracker: Kalman2D
+    tracker: Kalman2D,
     // @todo: keep track of object timestamps? default/new_with_time(...)?
 }
 
@@ -127,6 +127,9 @@ impl SimpleBlob {
     }
     pub fn inc_no_match(&mut self) {
         self.no_match_times += 1
+    }
+    pub fn reset_no_match(&mut self) {
+        self.no_match_times = 0
     }
     // Execute Kalman filter's first step but without re-evaluating state vector based on Kalman gain
     pub fn predict_next_position(&mut self) {

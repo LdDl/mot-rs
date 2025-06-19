@@ -4,6 +4,7 @@ mod simple_blob;
 mod simple_queue;
 mod simple;
 mod iou_tracker;
+mod bytetrack;
 
 pub use self::{
     mot_errors::*,
@@ -11,4 +12,5 @@ pub use self::{
     simple_queue::*,
     simple::*,
     iou_tracker::*,
+    bytetrack::*,
 };
