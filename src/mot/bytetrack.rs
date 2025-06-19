@@ -405,19 +405,19 @@ mod tests {
         
         assert_eq!(mot.objects.len(), 4);
 
-        println!("id;track");
-        for object in &mot.objects {
-            print!("{};", object.0);
-            let track = object.1.get_track();
-            for (idx, pt) in track.iter().enumerate() {
-                if idx == track.len() - 1 {
-                    print!("{},{}", pt.x, pt.y);
-                } else {
-                    print!("{},{}|", pt.x, pt.y);
-                }
-            }
-            println!();
-        }
+        // println!("id;track");
+        // for object in &mot.objects {
+        //     print!("{};", object.0);
+        //     let track = object.1.get_track();
+        //     for (idx, pt) in track.iter().enumerate() {
+        //         if idx == track.len() - 1 {
+        //             print!("{},{}", pt.x, pt.y);
+        //         } else {
+        //             print!("{},{}|", pt.x, pt.y);
+        //         }
+        //     }
+        //     println!();
+        // }
     }
 
     #[test]
