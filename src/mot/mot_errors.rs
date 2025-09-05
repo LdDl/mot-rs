@@ -27,10 +27,11 @@ impl From<String> for TrackerError {
 }
 
 #[derive(Debug)]
-pub struct NoObjectInTracker{pub txt: String}
+pub struct NoObjectInTracker {
+    pub txt: String,
+}
 impl fmt::Display for NoObjectInTracker {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "NoObjectInTracker: {}", self.txt)
     }
 }
-

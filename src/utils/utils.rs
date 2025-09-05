@@ -3,7 +3,7 @@ pub struct Rect {
     pub x: f32,
     pub y: f32,
     pub width: f32,
-    pub height: f32
+    pub height: f32,
 }
 
 impl Rect {
@@ -12,7 +12,7 @@ impl Rect {
             x: _x,
             y: _y,
             width: _width,
-            height: _height
+            height: _height,
         }
     }
 }
@@ -20,15 +20,12 @@ impl Rect {
 #[derive(Clone, Default, Debug)]
 pub struct Point {
     pub x: f32,
-    pub y: f32
+    pub y: f32,
 }
 
 impl Point {
     pub fn new(_x: f32, _y: f32) -> Self {
-        Point {
-            x: _x,
-            y: _y
-        }
+        Point { x: _x, y: _y }
     }
 }
 
@@ -56,7 +53,7 @@ pub fn iou(r1: &Rect, r2: &Rect) -> f32 {
     if x_overlap_width <= 0.0 || y_overlap_height <= 0.0 {
         return 0.0;
     }
-    
+
     let intersection_area = x_overlap_width * y_overlap_height;
     let r1_area = r1.width * r1.height;
     let r2_area = r2.width * r2.height;
@@ -110,4 +107,3 @@ mod tests {
         assert_eq!(super::iou(&rect11, &rect12), 1.0);
     }
 }
-
