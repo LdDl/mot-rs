@@ -3,11 +3,7 @@ use uuid::Uuid;
 use kalman_rust::kalman::Kalman2D;
 
 use crate::mot::mot_errors;
-use crate::utils::{
-    Rect,
-    Point,
-    euclidean_distance
-};
+use crate::utils::{euclidean_distance, Point, Rect};
 
 pub trait Blob {
     fn track_len(&self) -> usize;
@@ -36,7 +32,10 @@ impl SimpleBlob {
     pub fn new_with_dt(_current_bbox: Rect, dt: f32) -> Self {
         let center_x = _current_bbox.x as f32 + 0.5 * _current_bbox.width as f32;
         let center_y = _current_bbox.y as f32 + 0.5 * _current_bbox.height as f32;
-        let _diagonal = f32::sqrt((_current_bbox.width*_current_bbox.width) as f32 + (_current_bbox.height*_current_bbox.height) as f32);
+        let _diagonal = f32::sqrt(
+            (_current_bbox.width * _current_bbox.width) as f32
+                + (_current_bbox.height * _current_bbox.height) as f32,
+        );
         /* Kalman filter props */
         //
         // Why set initial state at all? See answer here: https://github.com/LdDl/kalman-rs/blob/master/src/kalman/kalman_2d.rs#L126
@@ -46,7 +45,9 @@ impl SimpleBlob {
         let std_dev_a = 2.0;
         let std_dev_mx = 0.1;
         let std_dev_my = 0.1;
-        let kf = Kalman2D::new_with_state(dt, ux, uy, std_dev_a, std_dev_mx, std_dev_my, center_x, center_y);
+        let kf = Kalman2D::new_with_state(
+            dt, ux, uy, std_dev_a, std_dev_mx, std_dev_my, center_x, center_y,
+        );
         let mut newb = SimpleBlob {
             id: Uuid::new_v4(),
             current_bbox: _current_bbox,
@@ -57,13 +58,16 @@ impl SimpleBlob {
             active: false,
             no_match_times: 0,
             diagonal: _diagonal,
-            tracker: kf
+            tracker: kf,
         };
         newb.track.push(newb.current_center.clone());
         newb
     }
     pub fn new_with_center_dt(_current_center: Point, _current_bbox: Rect, dt: f32) -> Self {
-        let _diagonal = f32::sqrt((_current_bbox.width*_current_bbox.width) as f32 + (_current_bbox.height*_current_bbox.height) as f32);
+        let _diagonal = f32::sqrt(
+            (_current_bbox.width * _current_bbox.width) as f32
+                + (_current_bbox.height * _current_bbox.height) as f32,
+        );
         /* Kalman filter props */
         //
         // Why set initial state at all? See answer here: https://github.com/LdDl/kalman-rs/blob/master/src/kalman/kalman_2d.rs#L126
@@ -73,7 +77,16 @@ impl SimpleBlob {
         let std_dev_a = 2.0;
         let std_dev_mx = 0.1;
         let std_dev_my = 0.1;
-        let kf = Kalman2D::new_with_state(dt, ux, uy, std_dev_a, std_dev_mx, std_dev_my, _current_center.x, _current_center.y);
+        let kf = Kalman2D::new_with_state(
+            dt,
+            ux,
+            uy,
+            std_dev_a,
+            std_dev_mx,
+            std_dev_my,
+            _current_center.x,
+            _current_center.y,
+        );
         let mut newb = SimpleBlob {
             id: Uuid::new_v4(),
             current_bbox: _current_bbox,
@@ -84,7 +97,7 @@ impl SimpleBlob {
             active: false,
             no_match_times: 0,
             diagonal: _diagonal,
-            tracker: kf
+            tracker: kf,
         };
         newb.track.push(newb.current_center.clone());
         newb
@@ -116,7 +129,7 @@ impl SimpleBlob {
     pub fn get_track(&self) -> &Vec<Point> {
         &self.track
     }
-    pub fn get_max_track_len(&self) -> usize{
+    pub fn get_max_track_len(&self) -> usize {
         self.max_track_len
     }
     pub fn set_max_track_len(&mut self, max_track_len: usize) {
@@ -167,7 +180,7 @@ impl SimpleBlob {
         if depth <= 1 {
             self.predicted_next_position.x = 0.0;
             self.predicted_next_position.y = 0.0;
-            return
+            return;
         }
         let mut current = track_len - 1;
         let mut prev = current - 1;
@@ -177,7 +190,7 @@ impl SimpleBlob {
         for i in 1..depth {
             let weight = (depth - i) as f32;
             delta_x += (self.track[current].x - self.track[prev].x) * weight;
-		    delta_y += (self.track[current].y - self.track[prev].y) * weight;
+            delta_y += (self.track[current].y - self.track[prev].y) * weight;
             sum += i as f32;
             current = prev;
             if current != 0 {
@@ -198,7 +211,8 @@ impl SimpleBlob {
         self.current_bbox = newb.current_bbox.to_owned();
 
         // Smooth center via Kalman filter.
-        self.tracker.update(newb.current_center.x as f32, newb.current_center.y as f32)?;
+        self.tracker
+            .update(newb.current_center.x as f32, newb.current_center.y as f32)?;
 
         // Update center and re-evaluate bounding box
         let (state_x, state_y) = self.tracker.get_state();
@@ -212,7 +226,7 @@ impl SimpleBlob {
             self.current_bbox.x - diff_x,
             self.current_bbox.y - diff_y,
             self.current_bbox.width - diff_x,
-            self.current_bbox.height - diff_y
+            self.current_bbox.height - diff_y,
         );
         // Update remaining properties
         self.diagonal = newb.diagonal;

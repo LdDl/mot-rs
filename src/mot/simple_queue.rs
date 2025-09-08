@@ -1,5 +1,5 @@
-use std::cmp::Ordering;
 use crate::mot::SimpleBlob;
+use std::cmp::Ordering;
 use uuid::Uuid;
 
 // Define a tuple struct to hold distance and SimpleBlob references for priority queue ordering.
@@ -20,7 +20,9 @@ impl<'a> Eq for DistanceBlob<'a> {}
 
 impl<'a> PartialOrd for DistanceBlob<'a> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        other.distance_metric_value.partial_cmp(&self.distance_metric_value)
+        other
+            .distance_metric_value
+            .partial_cmp(&self.distance_metric_value)
     }
 }
 
@@ -34,7 +36,8 @@ impl<'a> Ord for DistanceBlob<'a> {
 mod tests {
     #[test]
     fn test_min_heap() {
-        let mut priority_queue: std::collections::BinaryHeap<super::DistanceBlob> = std::collections::BinaryHeap::new();
+        let mut priority_queue: std::collections::BinaryHeap<super::DistanceBlob> =
+            std::collections::BinaryHeap::new();
         let blob1 = super::DistanceBlob {
             distance_metric_value: 1.0,
             min_id: uuid::Uuid::new_v4(),
@@ -59,7 +62,7 @@ mod tests {
         priority_queue.push(blob2);
         priority_queue.push(blob3);
         priority_queue.push(blob1);
-        
+
         assert_eq!(priority_queue.pop().unwrap().distance_metric_value, 1.0);
         assert_eq!(priority_queue.pop().unwrap().distance_metric_value, 2.0);
         assert_eq!(priority_queue.pop().unwrap().distance_metric_value, 3.0);
@@ -68,7 +71,9 @@ mod tests {
 
     #[test]
     fn test_max_heap() {
-        let mut priority_queue: std::collections::BinaryHeap<std::cmp::Reverse<super::DistanceBlob>> = std::collections::BinaryHeap::new();
+        let mut priority_queue: std::collections::BinaryHeap<
+            std::cmp::Reverse<super::DistanceBlob>,
+        > = std::collections::BinaryHeap::new();
         let blob1 = super::DistanceBlob {
             distance_metric_value: 1.0,
             min_id: uuid::Uuid::new_v4(),
@@ -93,7 +98,7 @@ mod tests {
         priority_queue.push(std::cmp::Reverse(blob2));
         priority_queue.push(std::cmp::Reverse(blob3));
         priority_queue.push(std::cmp::Reverse(blob1));
-        
+
         assert_eq!(priority_queue.pop().unwrap().0.distance_metric_value, 4.0);
         assert_eq!(priority_queue.pop().unwrap().0.distance_metric_value, 3.0);
         assert_eq!(priority_queue.pop().unwrap().0.distance_metric_value, 2.0);
