@@ -131,6 +131,27 @@ impl SimpleBlob {
     pub fn reset_no_match(&mut self) {
         self.no_match_times = 0
     }
+    /// Returns predicted position without mutating state (read-only peek)
+    pub fn get_predicted_position_readonly(&self) -> (f32, f32) {
+        self.tracker.get_predicted_position()
+    }
+    /// Returns position uncertainty for data association
+    pub fn get_position_uncertainty(&self) -> f32 {
+        self.tracker.get_position_uncertainty()
+    }
+    /// Returns predicted bounding box without mutating state
+    pub fn get_predicted_bbox_readonly(&self) -> Rect {
+        let (pred_x, pred_y) = self.get_predicted_position_readonly();
+        let diff_x = pred_x - self.current_center.x;
+        let diff_y = pred_y - self.current_center.y;
+        
+        Rect::new(
+            self.current_bbox.x + diff_x,
+            self.current_bbox.y + diff_y,
+            self.current_bbox.width,
+            self.current_bbox.height
+        )
+    }
     // Execute Kalman filter's first step but without re-evaluating state vector based on Kalman gain
     pub fn predict_next_position(&mut self) {
         self.tracker.predict();

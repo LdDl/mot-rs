@@ -9,8 +9,11 @@ use uuid::Uuid;
 use crate::mot::mot_errors;
 use crate::mot::DistanceBlob;
 use crate::mot::SimpleBlob;
-use crate::utils::iou;
-
+use crate::utils::{
+    iou,
+    Point,
+    euclidean_distance
+};
 /// Naive implementation of Multi-object tracker (MOT) with IoU matching
 pub struct IoUTracker {
     // Max no match (max number of frames when object could not be found again). Default is 75
@@ -57,22 +60,52 @@ impl IoUTracker {
     // Matches new objects to existing ones
     pub fn match_objects(&mut self, new_objects: &mut Vec<SimpleBlob>) -> Result<(), mot_errors::TrackerError>{
         for (_, object) in self.objects.iter_mut() {
-            object.deactivate(); // Make sure that object is marked as deactivated
-            // object.predict_next_position_naive(5);
-            object.predict_next_position();
+            // Make sure that object is marked as deactivated
+            object.deactivate();
         }
         let mut blobs_to_register: HashMap<Uuid, SimpleBlob> = HashMap::new();
 
         // Add new objects to priority queue
         let mut priority_queue: BinaryHeap<Reverse<DistanceBlob>> = BinaryHeap::new();
+        // Calculate IoU using PREDICTED positions
         for new_object in new_objects.iter_mut() {
             // Find existing blob with min distance to new one
             let mut max_id = Uuid::default();
             let mut max_iou = 0.0;
+
+            // Simple IoU matching (for restospective)
+            // for (j, object) in self.objects.iter() {
+            //     // let iou_value = iou(&new_object.get_bbox(), &object.get_bbox());
+            //     // Use predicted bbox for better matching
+            //     let predicted_bbox = object.get_predicted_bbox_readonly();
+            //     let iou_value = iou(&new_object.get_bbox(), &predicted_bbox);
+            //     if iou_value > max_iou {
+            //         max_iou = iou_value;
+            //         max_id = *j;
+            //     }
+            // }
+
+            // Hybrid IoU + Distance matching (for better recovery when IoU is zero)
             for (j, object) in self.objects.iter() {
-                let iou_value = iou(&new_object.get_bbox(), &object.get_bbox());
-                if iou_value > max_iou {
-                    max_iou = iou_value;
+                let predicted_bbox = object.get_predicted_bbox_readonly();
+                let iou_value = iou(&new_object.get_bbox(), &predicted_bbox);
+                // Add distance-based fallback
+                let predicted_center = Point::new(
+                    predicted_bbox.x + predicted_bbox.width / 2.0,
+                    predicted_bbox.y + predicted_bbox.height / 2.0
+                );
+                let distance = euclidean_distance(&predicted_center, &new_object.get_center());
+                // Convert to 0-1 similarity
+                let distance_score = 1.0 / (1.0 + distance * 0.01);
+                // Combine IoU and distance (favor IoU when available, fallback to distance)
+                let combined_score = if iou_value > 0.05 { 
+                    iou_value * 0.8 + distance_score * 0.2
+                } else {
+                    // Lower weight for pure distance matching
+                    distance_score * 0.5
+                };
+                if combined_score > max_iou {
+                    max_iou = combined_score;
                     max_id = *j;
                 }
             }
@@ -87,6 +120,7 @@ impl IoUTracker {
         // We need to prevent double update of objects
         let mut reserved_objects: HashSet<Uuid> = HashSet::new();
 
+        // Process matches with correct temporal order
         while let Some(distance_blob) = priority_queue.pop() {
             let max_iou = distance_blob.0.distance_metric_value;
             let min_id = distance_blob.0.min_id;
@@ -103,11 +137,15 @@ impl IoUTracker {
             if max_iou > self.iou_threshold {
                 match self.objects.get_mut(&min_id) {
                     Some(v) => {
-                        v.update(&distance_blob.0.blob)?;
+                        // Advance time and update in correct order:
+                        v.predict_next_position(); // Advance Kalman to t+1
+                        v.update(&distance_blob.0.blob)?; // Update with measurement from t+1
+                        v.reset_no_match();
                         // Last but not least:
-                        // We need to update ID of new object to match existing one (that is why we have &mut in function definition)
+                        // // We need to update ID of new object to match existing one (that is why we have &mut in function definition)
                         distance_blob.0.blob.set_id(min_id);
                         reserved_objects.insert(min_id);
+
                     },
                     None => {
                         return Err(mot_errors::TrackerError::from(mot_errors::NoObjectInTracker{txt: format!("immposible self.objects.get_mut(&min_id). Object ID {:?}. IoU value: {:?}", min_id, max_iou)}));
@@ -121,9 +159,16 @@ impl IoUTracker {
 
         self.objects.extend(blobs_to_register);
 
+        // Handle unmatched objects (predict forward for track maintenance)
+        for (id, object) in self.objects.iter_mut() {
+            if !reserved_objects.contains(id) {
+                object.predict_next_position(); // Advance unmatched tracks
+                object.inc_no_match();
+            }
+        }
+
         // Clean up existing data
         self.objects.retain(|_, object| {
-            object.inc_no_match();
             // Remove object if it was not found for a long time
             let delete = object.get_no_match_times() > self.max_no_match;
             !delete // <- if we want to keep object closure should return true
