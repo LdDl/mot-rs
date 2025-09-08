@@ -1,6 +1,6 @@
 use crate::mot::SimpleBlob;
 use crate::mot::TrackerError;
-use crate::utils::{iou, Rect};
+use crate::utils::{iou, Rect, Point, euclidean_distance};
 use pathfinding::{matrix::Matrix, prelude::kuhn_munkres_min};
 use std::collections::{BinaryHeap, HashMap, HashSet};
 use std::error::Error;
@@ -109,9 +109,9 @@ impl ByteTracker {
         }
 
         // Predict next positions for all existing tracks via Kalman filter
-        for (_, track) in self.objects.iter_mut() {
-            track.predict_next_position();
-        }
+        // for (_, track) in self.objects.iter_mut() {
+        //     track.predict_next_position();
+        // }
 
         // Get active tracks
         let active_track_ids: Vec<Uuid> = self
@@ -122,7 +122,7 @@ impl ByteTracker {
             .collect();
         let active_track_bboxes: Vec<(Uuid, Rect)> = active_track_ids
             .iter()
-            .map(|id| (*id, self.objects.get(id).unwrap().get_bbox()))
+            .map(|id| (*id, self.objects.get(id).unwrap().get_predicted_bbox_readonly())) // ← ИЗМЕНЕНИЕ: используем предсказанный bbox
             .collect();
 
         // Set of matched tracks for stage 1
@@ -210,6 +210,8 @@ impl ByteTracker {
         // 4. Increment no_match_times for unmatched tracks
         for (_, track) in self.objects.iter_mut() {
             if !matched_tracks.contains(&track.get_id()) {
+                // Progress to t+1 even if no match
+                track.predict_next_position();
                 track.inc_no_match();
             }
         }
@@ -236,13 +238,41 @@ impl ByteTracker {
         detection_indices: &[usize],
         detections: &[SimpleBlob],
     ) -> Vec<Vec<f32>> {
+        // Pure IoU approach (for retrospective)
+        // let mut iou_matrix: Vec<Vec<f32>> = Vec::with_capacity(track_bboxes.len());
+        // for (_, track_bbox) in track_bboxes {
+        //     let mut row = Vec::with_capacity(detection_indices.len());
+        //     for &det_idx in detection_indices {
+        //         let det_rect = detections[det_idx].get_bbox();
+        //         let iou_val = iou(track_bbox, &det_rect);
+        //         row.push(iou_val);
+        //     }
+        //     iou_matrix.push(row);
+        // }
+        // iou_matrix
         let mut iou_matrix: Vec<Vec<f32>> = Vec::with_capacity(track_bboxes.len());
         for (_, track_bbox) in track_bboxes {
             let mut row = Vec::with_capacity(detection_indices.len());
             for &det_idx in detection_indices {
                 let det_rect = detections[det_idx].get_bbox();
                 let iou_val = iou(track_bbox, &det_rect);
-                row.push(iou_val);
+                // Hybrid IoU + Distance matching (for better recovery when IoU is zero)
+                let combined_score = if iou_val > 0.05 {
+                    // Use IoU when it's reasonably high
+                    iou_val
+                } else {
+                    // Combine IoU and distance (favor IoU when available, fallback to distance)
+                    let track_center = Point::new(
+                        track_bbox.x + track_bbox.width / 2.0,
+                        track_bbox.y + track_bbox.height / 2.0
+                    );
+                    let distance = euclidean_distance(&track_center, &detections[det_idx].get_center());
+                    let distance_score = 1.0 / (1.0 + distance * 0.01);
+                    // Lower weight for pure distance matching
+                    distance_score * 0.3
+                };
+                
+                row.push(combined_score);
             }
             iou_matrix.push(row);
         }
@@ -345,7 +375,9 @@ impl ByteTracker {
                 let detection_idx = detection_indices[det_idx];
                 // Update track with matched detection
                 if let Some(track) = self.objects.get_mut(&track_id) {
-                    track.update(&detections_array[detection_idx])?;
+                    // Correct order: predict first, then update
+                    track.predict_next_position(); // Predict next position t+1
+                    track.update(&detections_array[detection_idx])?; // Update with detection at t+1
                     track.reset_no_match();
                     // Mark as matched
                     matched_tracks.insert(track_id);
@@ -354,6 +386,7 @@ impl ByteTracker {
             }
         }
         Ok(())
+
     }
 }
 
