@@ -25,6 +25,7 @@ pub struct SimpleBlob {
     no_match_times: usize,
     diagonal: f32,
     tracker: Kalman2D,
+    entity_id: usize,
     // @todo: keep track of object timestamps? default/new_with_time(...)?
 }
 
@@ -59,6 +60,7 @@ impl SimpleBlob {
             no_match_times: 0,
             diagonal: _diagonal,
             tracker: kf,
+            entity_id: 0,
         };
         newb.track.push(newb.current_center.clone());
         newb
@@ -98,6 +100,7 @@ impl SimpleBlob {
             no_match_times: 0,
             diagonal: _diagonal,
             tracker: kf,
+            entity_id: 0,
         };
         newb.track.push(newb.current_center.clone());
         newb
@@ -105,6 +108,17 @@ impl SimpleBlob {
     pub fn new(_current_bbox: Rect) -> Self {
         return SimpleBlob::new_with_dt(_current_bbox, 1.0);
     }
+
+    /// Add some entity_id be able to reassign a tracking uuid to an entity
+    pub fn with_entity_id(mut self, eid: usize) -> Self {
+        self.entity_id = eid;
+        self
+    }
+
+    pub fn get_entity_id(&self) -> usize {
+        self.entity_id
+    }
+
     pub fn activate(&mut self) {
         self.active = true
     }
@@ -157,12 +171,12 @@ impl SimpleBlob {
         let (pred_x, pred_y) = self.get_predicted_position_readonly();
         let diff_x = pred_x - self.current_center.x;
         let diff_y = pred_y - self.current_center.y;
-        
+
         Rect::new(
             self.current_bbox.x + diff_x,
             self.current_bbox.y + diff_y,
             self.current_bbox.width,
-            self.current_bbox.height
+            self.current_bbox.height,
         )
     }
     // Execute Kalman filter's first step but without re-evaluating state vector based on Kalman gain
@@ -209,6 +223,7 @@ impl SimpleBlob {
         // Update center
         self.current_center = newb.current_center.to_owned();
         self.current_bbox = newb.current_bbox.to_owned();
+        self.entity_id = newb.entity_id;
 
         // Smooth center via Kalman filter.
         self.tracker
