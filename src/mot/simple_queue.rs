@@ -34,29 +34,30 @@ impl<'a, B: Blob> Ord for DistanceBlob<'a, B> {
 }
 
 mod tests {
+    use crate::mot::SimpleBlob;
     #[test]
     fn test_min_heap() {
-        let mut priority_queue: std::collections::BinaryHeap<super::DistanceBlob> =
+        let mut priority_queue: std::collections::BinaryHeap<super::DistanceBlob<SimpleBlob>> =
             std::collections::BinaryHeap::new();
         let blob1 = super::DistanceBlob {
             distance_metric_value: 1.0,
             min_id: uuid::Uuid::new_v4(),
-            blob: &mut crate::mot::SimpleBlob::new(crate::utils::Rect::new(0.0, 0.0, 1.0, 1.0)),
+            blob: &mut SimpleBlob::new(crate::utils::Rect::new(0.0, 0.0, 1.0, 1.0)),
         };
         let blob2 = super::DistanceBlob {
             distance_metric_value: 2.0,
             min_id: uuid::Uuid::new_v4(),
-            blob: &mut crate::mot::SimpleBlob::new(crate::utils::Rect::new(0.0, 0.0, 1.0, 1.0)),
+            blob: &mut SimpleBlob::new(crate::utils::Rect::new(0.0, 0.0, 1.0, 1.0)),
         };
         let blob3 = super::DistanceBlob {
             distance_metric_value: 3.0,
             min_id: uuid::Uuid::new_v4(),
-            blob: &mut crate::mot::SimpleBlob::new(crate::utils::Rect::new(0.0, 0.0, 1.0, 1.0)),
+            blob: &mut SimpleBlob::new(crate::utils::Rect::new(0.0, 0.0, 1.0, 1.0)),
         };
         let blob4 = super::DistanceBlob {
             distance_metric_value: 4.0,
             min_id: uuid::Uuid::new_v4(),
-            blob: &mut crate::mot::SimpleBlob::new(crate::utils::Rect::new(0.0, 0.0, 1.0, 1.0)),
+            blob: &mut SimpleBlob::new(crate::utils::Rect::new(0.0, 0.0, 1.0, 1.0)),
         };
         priority_queue.push(blob4);
         priority_queue.push(blob2);
@@ -72,27 +73,27 @@ mod tests {
     #[test]
     fn test_max_heap() {
         let mut priority_queue: std::collections::BinaryHeap<
-            std::cmp::Reverse<super::DistanceBlob>,
+            std::cmp::Reverse<super::DistanceBlob<SimpleBlob>>,
         > = std::collections::BinaryHeap::new();
         let blob1 = super::DistanceBlob {
             distance_metric_value: 1.0,
             min_id: uuid::Uuid::new_v4(),
-            blob: &mut crate::mot::SimpleBlob::new(crate::utils::Rect::new(0.0, 0.0, 1.0, 1.0)),
+            blob: &mut SimpleBlob::new(crate::utils::Rect::new(0.0, 0.0, 1.0, 1.0)),
         };
         let blob2 = super::DistanceBlob {
             distance_metric_value: 2.0,
             min_id: uuid::Uuid::new_v4(),
-            blob: &mut crate::mot::SimpleBlob::new(crate::utils::Rect::new(0.0, 0.0, 1.0, 1.0)),
+            blob: &mut SimpleBlob::new(crate::utils::Rect::new(0.0, 0.0, 1.0, 1.0)),
         };
         let blob3 = super::DistanceBlob {
             distance_metric_value: 3.0,
             min_id: uuid::Uuid::new_v4(),
-            blob: &mut crate::mot::SimpleBlob::new(crate::utils::Rect::new(0.0, 0.0, 1.0, 1.0)),
+            blob: &mut SimpleBlob::new(crate::utils::Rect::new(0.0, 0.0, 1.0, 1.0)),
         };
         let blob4 = super::DistanceBlob {
             distance_metric_value: 4.0,
             min_id: uuid::Uuid::new_v4(),
-            blob: &mut crate::mot::SimpleBlob::new(crate::utils::Rect::new(0.0, 0.0, 1.0, 1.0)),
+            blob: &mut SimpleBlob::new(crate::utils::Rect::new(0.0, 0.0, 1.0, 1.0)),
         };
         priority_queue.push(std::cmp::Reverse(blob4));
         priority_queue.push(std::cmp::Reverse(blob2));
