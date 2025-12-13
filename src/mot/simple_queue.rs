@@ -1,24 +1,24 @@
-use crate::mot::SimpleBlob;
+use crate::mot::blob::Blob;
 use std::cmp::Ordering;
 use uuid::Uuid;
 
-// Define a tuple struct to hold distance and SimpleBlob references for priority queue ordering.
+// Define a tuple struct to hold distance and Blob references for priority queue ordering.
 // In case of centroid metric min heap is used, in case of IoU metric max heap is used.
-pub struct DistanceBlob<'a> {
+pub struct DistanceBlob<'a, B: Blob> {
     pub distance_metric_value: f32,
     pub min_id: Uuid,
-    pub blob: &'a mut SimpleBlob,
+    pub blob: &'a mut B,
 }
 
-impl<'a> PartialEq for DistanceBlob<'a> {
+impl<'a, B: Blob> PartialEq for DistanceBlob<'a, B> {
     fn eq(&self, other: &Self) -> bool {
         self.distance_metric_value == other.distance_metric_value
     }
 }
 
-impl<'a> Eq for DistanceBlob<'a> {}
+impl<'a, B: Blob> Eq for DistanceBlob<'a, B> {}
 
-impl<'a> PartialOrd for DistanceBlob<'a> {
+impl<'a, B: Blob> PartialOrd for DistanceBlob<'a, B> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         other
             .distance_metric_value
@@ -26,7 +26,7 @@ impl<'a> PartialOrd for DistanceBlob<'a> {
     }
 }
 
-impl<'a> Ord for DistanceBlob<'a> {
+impl<'a, B: Blob> Ord for DistanceBlob<'a, B> {
     fn cmp(&self, other: &Self) -> Ordering {
         // self.distance < other.distance
         self.partial_cmp(other).unwrap()
