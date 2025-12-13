@@ -4,6 +4,7 @@ use std::fmt;
 #[derive(Debug)]
 pub enum TrackerError {
     KalmanError(kalman::Kalman2DError),
+    KalmanBBoxError(kalman::KalmanBBoxError),
     NoObject(NoObjectInTracker),
     BadSize(String),
 }
@@ -11,6 +12,12 @@ pub enum TrackerError {
 impl From<kalman::Kalman2DError> for TrackerError {
     fn from(e: kalman::Kalman2DError) -> Self {
         TrackerError::KalmanError(e)
+    }
+}
+
+impl From<kalman::KalmanBBoxError> for TrackerError {
+    fn from(e: kalman::KalmanBBoxError) -> Self {
+        TrackerError::KalmanBBoxError(e)
     }
 }
 
