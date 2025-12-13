@@ -1,9 +1,8 @@
-use crate::mot::SimpleBlob;
+use crate::mot::blob::Blob;
 use crate::mot::TrackerError;
 use crate::utils::{iou, Rect, Point, euclidean_distance};
 use pathfinding::{matrix::Matrix, prelude::kuhn_munkres_min};
-use std::collections::{BinaryHeap, HashMap, HashSet};
-use std::error::Error;
+use std::collections::{HashMap, HashSet};
 use uuid::Uuid;
 
 const SCALE_FACTOR: f32 = 1_000_000.0;
@@ -18,7 +17,7 @@ pub enum MatchingAlgorithm {
 }
 
 /// Straightforward implementation of Multi-object tracker (MOT) called ByteTrack.
-pub struct ByteTracker {
+pub struct ByteTracker<B: Blob> {
     /// Maximum number of frames an object can be missing before it is removed
     max_disappeared: usize,
     /// Maximum distance between two objects to be considered the same
@@ -30,17 +29,17 @@ pub struct ByteTracker {
     /// Algorithm to use for matching
     algorithm: MatchingAlgorithm,
     /// Storage
-    pub objects: HashMap<Uuid, SimpleBlob>,
+    pub objects: HashMap<Uuid, B>,
 }
 
-impl ByteTracker {
+impl<B: Blob> ByteTracker<B> {
     /// Creates default instance of ByteTracker
     ///
     /// Basic usage:
     ///
     /// ```
-    /// use mot_rs::mot::ByteTracker;
-    /// let mut tracker = ByteTracker::default();
+    /// use mot_rs::mot::{ByteTracker, SimpleBlob};
+    /// let mut tracker: ByteTracker<SimpleBlob> = ByteTracker::default();
     /// ```
     pub fn default() -> Self {
         ByteTracker {
@@ -57,14 +56,13 @@ impl ByteTracker {
     /// Basic usage:
     ///
     /// ```
-    /// use mot_rs::mot::ByteTracker;
-    /// use mot_rs::mot::MatchingAlgorithm;
+    /// use mot_rs::mot::{ByteTracker, SimpleBlob, MatchingAlgorithm};
     /// let max_disappeared = 5;
     /// let min_iou = 0.3;
     /// let high_thresh = 0.5;
     /// let low_thresh = 0.3;
     /// let algorithm = MatchingAlgorithm::Hungarian;
-    /// let mut tracker = ByteTracker::new(
+    /// let mut tracker: ByteTracker<SimpleBlob> = ByteTracker::new(
     ///     max_disappeared,
     ///     min_iou,
     ///     high_thresh,
@@ -90,14 +88,14 @@ impl ByteTracker {
     }
 
     /// Matches objects in the current frame with existing tracks.
-    ///     
+    ///
     /// # Arguments
     /// * `detections` - A slice of rectangles representing detected objects.
     /// * `confidences` - A slice of confidence scores for the detected objects.
     ///
     pub fn match_objects(
         &mut self,
-        detections: &mut Vec<SimpleBlob>,
+        detections: &mut Vec<B>,
         confidences: &[f32],
     ) -> Result<(), TrackerError> {
         if detections.len() != confidences.len() {
@@ -225,7 +223,7 @@ impl ByteTracker {
     }
     /// Returns a vec of active tracks.
     ///
-    pub fn get_active_tracks(&self) -> Vec<&SimpleBlob> {
+    pub fn get_active_tracks(&self) -> Vec<&B> {
         self.objects
             .iter()
             .filter(|(_, track)| track.get_no_match_times() < self.max_disappeared)
@@ -237,7 +235,7 @@ impl ByteTracker {
         &self,
         track_bboxes: &[(Uuid, Rect)],
         detection_indices: &[usize],
-        detections: &[SimpleBlob],
+        detections: &[B],
     ) -> Vec<Vec<f32>> {
         // Pure IoU approach (for retrospective)
         // let mut iou_matrix: Vec<Vec<f32>> = Vec::with_capacity(track_bboxes.len());
@@ -364,7 +362,7 @@ impl ByteTracker {
         track_bboxes: &[(Uuid, Rect)],
         detection_indices: &[usize],
         iou_matrix: &[Vec<f32>],
-        detections_array: &mut Vec<SimpleBlob>,
+        detections_array: &mut Vec<B>,
         matched_tracks: &mut HashSet<Uuid>,
         matched_detections: &mut HashSet<usize>,
     ) -> Result<(), TrackerError> {
@@ -392,7 +390,7 @@ impl ByteTracker {
 }
 
 mod tests {
-    use crate::mot::{ByteTracker, MatchingAlgorithm, SimpleBlob};
+    use crate::mot::{MatchingAlgorithm, SimpleBlob};
     use crate::utils::Rect;
     #[test]
     fn test_match_objects_spread() {
@@ -532,7 +530,7 @@ mod tests {
             vec![0.88, 0.39, 0.92],       // Frame 27
         ];
 
-        let mut mot = ByteTracker::new(5, 0.3, 0.5, 0.3, MatchingAlgorithm::Hungarian);
+        let mut mot: super::ByteTracker<SimpleBlob> = super::ByteTracker::new(5, 0.3, 0.5, 0.3, MatchingAlgorithm::Hungarian);
         let dt = 1.0 / 25.00; // emulate 25 fps
 
         for (i, iteration) in bboxes_iterations.iter().enumerate() {
@@ -912,7 +910,7 @@ mod tests {
             vec![152, 148, 302, 208],
         ];
 
-        let mut tracker = ByteTracker::new(
+        let mut tracker: super::ByteTracker<SimpleBlob> = super::ByteTracker::new(
             50,  // max_disappeared
             0.1, // min_iou
             0.7, // high_thresh
@@ -924,7 +922,7 @@ mod tests {
         for (bbox_one, bbox_two, bbox_three) in
             itertools::izip!(bboxes_one, bboxes_two, bboxes_three)
         {
-            let blob_one = super::SimpleBlob::new_with_dt(
+            let blob_one = SimpleBlob::new_with_dt(
                 Rect::new(
                     bbox_one[0] as f32,
                     bbox_one[1] as f32,
@@ -933,7 +931,7 @@ mod tests {
                 ),
                 dt,
             );
-            let blob_two = super::SimpleBlob::new_with_dt(
+            let blob_two = SimpleBlob::new_with_dt(
                 Rect::new(
                     bbox_two[0] as f32,
                     bbox_two[1] as f32,
@@ -942,7 +940,7 @@ mod tests {
                 ),
                 dt,
             );
-            let blob_three = super::SimpleBlob::new_with_dt(
+            let blob_three = SimpleBlob::new_with_dt(
                 Rect::new(
                     bbox_three[0] as f32,
                     bbox_three[1] as f32,
