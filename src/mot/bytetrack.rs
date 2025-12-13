@@ -540,7 +540,7 @@ mod tests {
     fn test_match_objects_naive() {
         let (bboxes_one, bboxes_two, bboxes_three) = get_naive_data();
 
-        let mut tracker: super::ByteTracker<SimpleBlob> = super::ByteTracker::new(
+        let mut mot: super::ByteTracker<SimpleBlob> = super::ByteTracker::new(
             50,  // max_disappeared
             0.1, // min_iou
             0.7, // high_thresh
@@ -559,7 +559,7 @@ mod tests {
             let mut blobs = vec![blob_one, blob_two, blob_three];
             // Static confidence scores for testing
             let confidence_scores = vec![0.9, 0.8, 0.7];
-            match tracker.match_objects(&mut blobs, &confidence_scores) {
+            match mot.match_objects(&mut blobs, &confidence_scores) {
                 Ok(_) => {}
                 Err(err) => {
                     println!("{:?}", err);
@@ -567,7 +567,7 @@ mod tests {
             };
         }
 
-        assert_eq!(tracker.objects.len(), 3);
+        assert_eq!(mot.objects.len(), 3);
 
         // println!("id;track");
         // for object in &mot.objects {
@@ -588,7 +588,7 @@ mod tests {
     fn test_match_objects_naive_bbox() {
         let (bboxes_one, bboxes_two, bboxes_three) = get_naive_data();
 
-        let mut tracker: super::ByteTracker<BlobBBox> = super::ByteTracker::new(
+        let mut mot: super::ByteTracker<BlobBBox> = super::ByteTracker::new(
             50,  // max_disappeared
             0.1, // min_iou
             0.7, // high_thresh
@@ -607,7 +607,7 @@ mod tests {
             let mut blobs = vec![blob_one, blob_two, blob_three];
             // Static confidence scores for testing
             let confidence_scores = vec![0.9, 0.8, 0.7];
-            match tracker.match_objects(&mut blobs, &confidence_scores) {
+            match mot.match_objects(&mut blobs, &confidence_scores) {
                 Ok(_) => {}
                 Err(err) => {
                     println!("{:?}", err);
@@ -615,7 +615,7 @@ mod tests {
             };
         }
 
-        assert_eq!(tracker.objects.len(), 3);
+        assert_eq!(mot.objects.len(), 3);
 
         // println!("id;track");
         // for object in &mot.objects {
