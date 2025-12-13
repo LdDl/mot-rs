@@ -7,6 +7,7 @@ mod simple;
 mod simple_blob;
 mod blob_bbox;
 mod simple_queue;
+mod test_data;
 
 pub use self::{
     blob::*, bytetrack::*, iou_tracker::*, mot_errors::*, simple::*, simple_blob::*, blob_bbox::*,
