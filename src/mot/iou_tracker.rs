@@ -232,9 +232,15 @@ mod tests {
 
     #[test]
     fn test_match_objects_spread_bbox() {
+        use std::collections::HashMap;
+        use uuid::Uuid;
+
         let bboxes_iterations = get_spread_data();
         let mut mot: super::IoUTracker<BlobBBox> = super::IoUTracker::new(5, 0.3);
         let dt = 1.0 / 25.00; // emulate 25 fps
+
+        // Collect bbox history during iterations
+        let mut bbox_history: HashMap<Uuid, Vec<(f32, f32, f32, f32)>> = HashMap::new();
 
         for iteration in bboxes_iterations {
             let mut blobs: Vec<BlobBBox> = iteration
@@ -247,19 +253,26 @@ mod tests {
                     println!("{:?}", err);
                 }
             };
+            // Collect current bbox for each tracked object
+            for (id, obj) in &mot.objects {
+                let bbox = obj.get_bbox();
+                let cx = bbox.x + bbox.width / 2.0;
+                let cy = bbox.y + bbox.height / 2.0;
+                bbox_history.entry(*id).or_default().push((cx, cy, bbox.width, bbox.height));
+            }
         }
 
         assert_eq!(mot.objects.len(), 4);
 
+        // Output format: id;cx,cy,w,h|cx,cy,w,h|...
         // println!("id;track");
-        // for object in &mot.objects {
-        //     print!("{};", object.0);
-        //     let track = object.1.get_track();
-        //     for (idx, pt) in track.iter().enumerate() {
-        //         if idx == track.len() - 1 {
-        //             print!("{},{}", pt.x, pt.y);
+        // for (id, history) in &bbox_history {
+        //     print!("{};", id);
+        //     for (idx, (cx, cy, w, h)) in history.iter().enumerate() {
+        //         if idx == history.len() - 1 {
+        //             print!("{},{},{},{}", cx, cy, w, h);
         //         } else {
-        //             print!("{},{}|", pt.x, pt.y);
+        //             print!("{},{},{},{}|", cx, cy, w, h);
         //         }
         //     }
         //     println!();
@@ -307,9 +320,15 @@ mod tests {
 
     #[test]
     fn test_match_objects_naive_bbox() {
+        use std::collections::HashMap;
+        use uuid::Uuid;
+
         let (bboxes_one, bboxes_two, bboxes_three) = get_naive_data();
         let mut mot: super::IoUTracker<BlobBBox> = super::IoUTracker::new(5, 0.3);
         let dt = 1.0 / 25.00; // emulate 25 fps
+
+        // Collect bbox history during iterations
+        let mut bbox_history: HashMap<Uuid, Vec<(f32, f32, f32, f32)>> = HashMap::new();
 
         for (bbox_one, bbox_two, bbox_three) in
             itertools::izip!(bboxes_one, bboxes_two, bboxes_three)
@@ -325,19 +344,26 @@ mod tests {
                     println!("{:?}", err);
                 }
             };
+            // Collect current bbox for each tracked object
+            for (id, obj) in &mot.objects {
+                let bbox = obj.get_bbox();
+                let cx = bbox.x + bbox.width / 2.0;
+                let cy = bbox.y + bbox.height / 2.0;
+                bbox_history.entry(*id).or_default().push((cx, cy, bbox.width, bbox.height));
+            }
         }
 
         assert_eq!(mot.objects.len(), 3);
 
+        // Output format: id;cx,cy,w,h|cx,cy,w,h|...
         // println!("id;track");
-        // for object in &mot.objects {
-        //     print!("{};", object.0);
-        //     let track = object.1.get_track();
-        //     for (idx, pt) in track.iter().enumerate() {
-        //         if idx == track.len() - 1 {
-        //             print!("{},{}", pt.x, pt.y);
+        // for (id, history) in &bbox_history {
+        //     print!("{};", id);
+        //     for (idx, (cx, cy, w, h)) in history.iter().enumerate() {
+        //         if idx == history.len() - 1 {
+        //             print!("{},{},{},{}", cx, cy, w, h);
         //         } else {
-        //             print!("{},{}|", pt.x, pt.y);
+        //             print!("{},{},{},{}|", cx, cy, w, h);
         //         }
         //     }
         //     println!();
