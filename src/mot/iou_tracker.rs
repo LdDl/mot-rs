@@ -1,9 +1,9 @@
 use std::cmp::Reverse;
 use std::collections::{BinaryHeap, HashMap, HashSet};
 
+use crate::mot::blob::Blob;
 use crate::mot::mot_errors;
 use crate::mot::DistanceBlob;
-use crate::mot::SimpleBlob;
 use crate::utils::{
     iou,
     Point,
@@ -12,23 +12,23 @@ use crate::utils::{
 use uuid::Uuid;
 
 /// Naive implementation of Multi-object tracker (MOT) with IoU matching
-pub struct IoUTracker {
+pub struct IoUTracker<B: Blob> {
     // Max no match (max number of frames when object could not be found again). Default is 75
     max_no_match: usize,
     // IoU threshold for matching. Default is 0.3
     iou_threshold: f32,
     // Storage
-    pub objects: HashMap<Uuid, SimpleBlob>,
+    pub objects: HashMap<Uuid, B>,
 }
 
-impl IoUTracker {
+impl<B: Blob> IoUTracker<B> {
     /// Creates default instance of IoUTracker
     ///
     /// Basic usage:
     ///
     /// ```
-    /// use mot_rs::mot::IoUTracker;
-    /// let mut tracker = IoUTracker::default();
+    /// use mot_rs::mot::{IoUTracker, SimpleBlob};
+    /// let mut tracker: IoUTracker<SimpleBlob> = IoUTracker::default();
     /// ```
     pub fn default() -> Self {
         IoUTracker {
@@ -42,10 +42,10 @@ impl IoUTracker {
     /// Basic usage:
     ///
     /// ```
-    /// use mot_rs::mot::IoUTracker;
+    /// use mot_rs::mot::{IoUTracker, SimpleBlob};
     /// let max_no_match: usize = 100;
     /// let iou_threshold: f32 = 0.3;
-    /// let mut tracker = IoUTracker::new(max_no_match, iou_threshold);
+    /// let mut tracker: IoUTracker<SimpleBlob> = IoUTracker::new(max_no_match, iou_threshold);
     /// ```
     pub fn new(_max_no_match: usize, _iou_threshold: f32) -> Self {
         IoUTracker {
@@ -57,16 +57,16 @@ impl IoUTracker {
     // Matches new objects to existing ones
     pub fn match_objects(
         &mut self,
-        new_objects: &mut Vec<SimpleBlob>,
+        new_objects: &mut Vec<B>,
     ) -> Result<(), mot_errors::TrackerError> {
         for (_, object) in self.objects.iter_mut() {
             // Make sure that object is marked as deactivated
             object.deactivate();
         }
-        let mut blobs_to_register: HashMap<Uuid, SimpleBlob> = HashMap::new();
+        let mut blobs_to_register: HashMap<Uuid, B> = HashMap::new();
 
         // Add new objects to priority queue
-        let mut priority_queue: BinaryHeap<Reverse<DistanceBlob>> = BinaryHeap::new();
+        let mut priority_queue: BinaryHeap<Reverse<DistanceBlob<B>>> = BinaryHeap::new();
         // Calculate IoU using PREDICTED positions
         for new_object in new_objects.iter_mut() {
             // Find existing blob with min distance to new one
@@ -179,7 +179,7 @@ impl IoUTracker {
 }
 
 use std::fmt;
-impl fmt::Display for IoUTracker {
+impl<B: Blob> fmt::Display for IoUTracker<B> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
@@ -190,6 +190,7 @@ impl fmt::Display for IoUTracker {
 }
 
 mod tests {
+    use crate::mot::SimpleBlob;
     use crate::utils::Rect;
     use std::collections::BinaryHeap;
     #[test]
@@ -301,13 +302,13 @@ mod tests {
             // vec![Rect::new(365.0,-10.0,143.0,114.0), Rect::new(645.0,99.0,283.0,345.0), Rect::new(9.0,141.0,238.0,323.0)],
         ];
 
-        let mut mot = super::IoUTracker::new(5, 0.3);
+        let mut mot: super::IoUTracker<SimpleBlob> = super::IoUTracker::new(5, 0.3);
         let dt = 1.0 / 25.00; // emulate 25 fps
 
         for iteration in bboxes_iterations {
-            let mut blobs: Vec<super::SimpleBlob> = iteration
+            let mut blobs: Vec<SimpleBlob> = iteration
                 .into_iter()
-                .map(|bbox| super::SimpleBlob::new_with_dt(bbox, dt))
+                .map(|bbox| SimpleBlob::new_with_dt(bbox, dt))
                 .collect();
             match mot.match_objects(&mut blobs) {
                 Ok(_) => {}
@@ -678,13 +679,13 @@ mod tests {
             vec![152, 148, 302, 208],
             vec![152, 148, 302, 208],
         ];
-        let mut mot = super::IoUTracker::new(5, 0.3);
+        let mut mot: super::IoUTracker<SimpleBlob> = super::IoUTracker::new(5, 0.3);
         let dt = 1.0 / 25.00; // emulate 25 fps
 
         for (bbox_one, bbox_two, bbox_three) in
             itertools::izip!(bboxes_one, bboxes_two, bboxes_three)
         {
-            let blob_one = super::SimpleBlob::new_with_dt(
+            let blob_one = SimpleBlob::new_with_dt(
                 Rect::new(
                     bbox_one[0] as f32,
                     bbox_one[1] as f32,
@@ -693,7 +694,7 @@ mod tests {
                 ),
                 dt,
             );
-            let blob_two = super::SimpleBlob::new_with_dt(
+            let blob_two = SimpleBlob::new_with_dt(
                 Rect::new(
                     bbox_two[0] as f32,
                     bbox_two[1] as f32,
@@ -702,7 +703,7 @@ mod tests {
                 ),
                 dt,
             );
-            let blob_three = super::SimpleBlob::new_with_dt(
+            let blob_three = SimpleBlob::new_with_dt(
                 Rect::new(
                     bbox_three[0] as f32,
                     bbox_three[1] as f32,
