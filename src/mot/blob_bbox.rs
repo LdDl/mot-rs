@@ -325,6 +325,38 @@ impl BlobBBox {
         let p2 = Point::new(pred_x2, pred_y2);
         euclidean_distance(&p1, &p2)
     }
+}
+
+use crate::mot::blob::Blob;
+impl Blob for BlobBBox {
+    fn get_id(&self) -> Uuid { self.id }
+    fn set_id(&mut self, new_id: Uuid) { self.id = new_id }
+    fn get_center(&self) -> Point { self.current_center.clone() }
+    fn get_bbox(&self) -> Rect { self.current_bbox.clone() }
+    fn get_diagonal(&self) -> f32 { self.diagonal }
+    fn get_predicted_bbox_readonly(&self) -> Rect { BlobBBox::get_predicted_bbox_readonly(self) }
+    fn get_predicted_position_readonly(&self) -> (f32, f32) { BlobBBox::get_predicted_position_readonly(self) }
+    fn get_position_uncertainty(&self) -> f32 { self.tracker.get_position_uncertainty() }
+    fn get_track(&self) -> &Vec<Point> { &self.track }
+    fn track_len(&self) -> usize { self.track.len() }
+    fn get_max_track_len(&self) -> usize { self.max_track_len }
+    fn set_max_track_len(&mut self, max_track_len: usize) { self.max_track_len = max_track_len }
+    fn exists(&self) -> bool { self.active }
+    fn activate(&mut self) { self.active = true }
+    fn deactivate(&mut self) { self.active = false }
+    fn get_no_match_times(&self) -> usize { self.no_match_times }
+    fn inc_no_match(&mut self) { self.no_match_times += 1 }
+    fn reset_no_match(&mut self) { self.no_match_times = 0 }
+    fn get_entity_id(&self) -> usize { self.entity_id }
+    fn predict_next_position(&mut self) { BlobBBox::predict_next_position(self) }
+    fn update(&mut self, measurement: &Self) -> Result<(), mot_errors::TrackerError> {
+        BlobBBox::update(self, measurement)
+    }
+    fn distance_to(&self, other: &Self) -> f32 { BlobBBox::distance_to(self, other) }
+    fn distance_to_predicted(&self, other: &Self) -> f32 { BlobBBox::distance_to_predicted(self, other) }
+}
+
+impl BlobBBox {
     // Naive old approach to give an idea what is going on
     // I've saved this method just for retrospective
     pub fn predict_next_position_naive(&mut self, _depth: usize) {
