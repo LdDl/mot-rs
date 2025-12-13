@@ -238,10 +238,10 @@ impl SimpleBlob {
         let diff_x = self.current_center.x - old_x;
         let diff_y = self.current_center.y - old_y;
         self.current_bbox = Rect::new(
-            self.current_bbox.x - diff_x,
-            self.current_bbox.y - diff_y,
-            self.current_bbox.width - diff_x,
-            self.current_bbox.height - diff_y,
+            self.current_bbox.x + diff_x,
+            self.current_bbox.y + diff_y,
+            self.current_bbox.width,
+            self.current_bbox.height,
         );
         // Update remaining properties
         self.diagonal = newb.diagonal;
