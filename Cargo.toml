@@ -4,7 +4,7 @@ repository = "https://github.com/LdDl/mot-rs"
 readme = "README.md"
 keywords = ["computer-vision", "kalman", "tracking", "filtering"]
 license = "MIT"
-version = "0.3.2"
+version = "0.4.0"
 edition = "2024"
 authors = ["Dimitrii Lopanov <sexykdi@gmail.com>"]
 exclude = ["/.github", "/ci", "/tools", "release.toml", "rustfmt.toml"]
@@ -16,7 +16,7 @@ categories = ["algorithms", "computer-vision", "mathematics", "science"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-kalman-rust = "0.2.5"
+kalman-rust = "0.3.0"
 uuid = { version = "1.5.0", features = ["serde", "v4"] }
 chrono = "0.4.31"
 itertools = "0.11.0"

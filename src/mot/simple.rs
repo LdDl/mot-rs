@@ -1,28 +1,28 @@
 use std::collections::{BinaryHeap, HashMap, HashSet};
 
+use crate::mot::blob::Blob;
 use crate::mot::mot_errors;
 use crate::mot::DistanceBlob;
-use crate::mot::SimpleBlob;
 use uuid::Uuid;
 
 /// Naive implementation of Multi-object tracker (MOT)
-pub struct SimpleTracker {
+pub struct SimpleTracker<B: Blob> {
     // Max no match (max number of frames when object could not be found again). Default is 75
     max_no_match: usize,
     // Threshold distance (most of time in pixels). Default 30.0
     min_dist_threshold: f32,
     // Storage
-    pub objects: HashMap<Uuid, SimpleBlob>,
+    pub objects: HashMap<Uuid, B>,
 }
 
-impl SimpleTracker {
+impl<B: Blob> SimpleTracker<B> {
     /// Creates default instance of SimpleTracker
     ///
     /// Basic usage:
     ///
     /// ```
-    /// use mot_rs::mot::SimpleTracker;
-    /// let mut tracker = SimpleTracker::default();
+    /// use mot_rs::mot::{SimpleTracker, SimpleBlob};
+    /// let mut tracker: SimpleTracker<SimpleBlob> = SimpleTracker::default();
     /// ```
     pub fn default() -> Self {
         SimpleTracker {
@@ -36,10 +36,10 @@ impl SimpleTracker {
     /// Basic usage:
     ///
     /// ```
-    /// use mot_rs::mot::SimpleTracker;
+    /// use mot_rs::mot::{SimpleTracker, SimpleBlob};
     /// let max_no_match: usize = 100;
     /// let min_dist_threshold: f32 = 15.0;
-    /// let mut tracker = SimpleTracker::new(max_no_match, min_dist_threshold);
+    /// let mut tracker: SimpleTracker<SimpleBlob> = SimpleTracker::new(max_no_match, min_dist_threshold);
     /// ```
     pub fn new(_max_no_match: usize, _min_dist_threshold: f32) -> Self {
         SimpleTracker {
@@ -51,17 +51,17 @@ impl SimpleTracker {
     // Matches new objects to existing ones
     pub fn match_objects(
         &mut self,
-        new_objects: &mut Vec<SimpleBlob>,
+        new_objects: &mut Vec<B>,
     ) -> Result<(), mot_errors::TrackerError> {
         for (_, object) in self.objects.iter_mut() {
             object.deactivate(); // Make sure that object is marked as deactivated
                                  // object.predict_next_position_naive(5);
             object.predict_next_position();
         }
-        let mut blobs_to_register: HashMap<Uuid, SimpleBlob> = HashMap::new();
+        let mut blobs_to_register: HashMap<Uuid, B> = HashMap::new();
 
         // Add new objects to priority queue
-        let mut priority_queue: BinaryHeap<DistanceBlob> = BinaryHeap::new();
+        let mut priority_queue: BinaryHeap<DistanceBlob<B>> = BinaryHeap::new();
         for new_object in new_objects.iter_mut() {
             // Find existing blob with min distance to new one
             let mut min_id = Uuid::default();
@@ -134,7 +134,7 @@ impl SimpleTracker {
 }
 
 use std::fmt;
-impl fmt::Display for SimpleTracker {
+impl<B: Blob> fmt::Display for SimpleTracker<B> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
@@ -145,6 +145,7 @@ impl fmt::Display for SimpleTracker {
 }
 
 mod tests {
+    use crate::mot::SimpleBlob;
     #[test]
     fn test_match_objects_spread() {
         let bboxes_iterations: Vec<Vec<crate::utils::Rect>> = vec![
@@ -254,13 +255,13 @@ mod tests {
             // vec![crate::utils::Rect::new(365.0,-10.0,143.0,114.0), crate::utils::Rect::new(645.0,99.0,283.0,345.0), crate::utils::Rect::new(9.0,141.0,238.0,323.0)],
         ];
 
-        let mut mot = super::SimpleTracker::new(5, 15.0);
+        let mut mot: super::SimpleTracker<SimpleBlob> = super::SimpleTracker::new(5, 15.0);
         let dt = 1.0 / 25.00; // emulate 25 fps
 
         for iteration in bboxes_iterations {
-            let mut blobs: Vec<super::SimpleBlob> = iteration
+            let mut blobs: Vec<SimpleBlob> = iteration
                 .into_iter()
-                .map(|bbox| super::SimpleBlob::new_with_dt(bbox, dt))
+                .map(|bbox| SimpleBlob::new_with_dt(bbox, dt))
                 .collect();
             match mot.match_objects(&mut blobs) {
                 Ok(_) => {}
@@ -631,13 +632,13 @@ mod tests {
             vec![152, 148, 302, 208],
             vec![152, 148, 302, 208],
         ];
-        let mut mot = super::SimpleTracker::new(5, 15.0);
+        let mut mot: super::SimpleTracker<SimpleBlob> = super::SimpleTracker::new(5, 15.0);
         let dt = 1.0 / 25.00; // emulate 25 fps
 
         for (bbox_one, bbox_two, bbox_three) in
             itertools::izip!(bboxes_one, bboxes_two, bboxes_three)
         {
-            let blob_one = super::SimpleBlob::new_with_dt(
+            let blob_one = SimpleBlob::new_with_dt(
                 crate::utils::Rect::new(
                     bbox_one[0] as f32,
                     bbox_one[1] as f32,
@@ -646,7 +647,7 @@ mod tests {
                 ),
                 dt,
             );
-            let blob_two = super::SimpleBlob::new_with_dt(
+            let blob_two = SimpleBlob::new_with_dt(
                 crate::utils::Rect::new(
                     bbox_two[0] as f32,
                     bbox_two[1] as f32,
@@ -655,7 +656,7 @@ mod tests {
                 ),
                 dt,
             );
-            let blob_three = super::SimpleBlob::new_with_dt(
+            let blob_three = SimpleBlob::new_with_dt(
                 crate::utils::Rect::new(
                     bbox_three[0] as f32,
                     bbox_three[1] as f32,
