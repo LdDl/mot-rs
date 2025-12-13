@@ -25,6 +25,15 @@ You can use this library to track vehicles / peoples and etc. when you don't nee
 - [ByteTrack](https://arxiv.org/abs/2110.06864) using greedy matching algorithm - [src/mot/bytetrack.rs#L260](src/mot/bytetrack.rs#L260)
 - [ByteTrack](https://arxiv.org/abs/2110.06864) using [Hungarian algorithm](https://en.wikipedia.org/wiki/Hungarian_algorithm) via [pathfinding crate](https://docs.rs/pathfinding/latest/pathfinding/) - [src/mot/bytetrack.rs#L233](src/mot/bytetrack.rs#L233)
 
+**What blob types are available?**
+
+All trackers are generic over the `Blob` trait, so you can choose between two implementations:
+
+| Type | State Dimensions | Kalman Filter | Use Case |
+|------|-----------------|---------------|----------|
+| `SimpleBlob` | 4D (x, y, vx, vy) | 2D position tracking | When you only need centroid tracking. Faster and simpler. |
+| `BlobBBox` | 8D (cx, cy, w, h, vx, vy, vw, vh) | Full bbox tracking | When you need to track bounding box size changes (e.g., objects approaching/receding from camera). |
+
 **Are more advanced algorithms considered to be implemented in futher?**
 
 Yes, I do think so. I guess that [SORT](https://arxiv.org/abs/1602.00763) will be the next one.
@@ -33,13 +42,26 @@ If you want to you can contribute via opening [Pull Request](https://github.com/
 
 
 **Some examples**
-Simple centroid IoU tracker for three simple tracks |  ByteTrack + Hungarian algorithm for three simple tracks
-:-------------------------:|:-------------------------:
-<img src="images/mot_simple_naive.png" width="480">  |  <img src="images/mot_simple_bytetrack_naive.png" width="480">
 
-Simple centroid IoU tracker for spread tracks |  ByteTrack + Hungarian algorithm for spread tracks
-:-------------------------:|:-------------------------:
-<img src="images/mot_simple_spread.png" width="480">  |  <img src="images/mot_simple_bytetrack_spread.png" width="480">
+### SimpleBlob (centroid tracking)
+
+Simple tracker for dense tracks |  IoU tracker for dense tracks | ByteTrack for dense tracks
+:-------------------------:|:-------------------------:|:-------------------------:
+<img src="images/mot_simple_naive.png" width="320">  |  <img src="images/mot_simple_iou_naive.png" width="320">  |  <img src="images/mot_simple_bytetrack_naive.png" width="320">
+
+Simple tracker for spread tracks |  IoU tracker for spread tracks | ByteTrack for spread tracks
+:-------------------------:|:-------------------------:|:-------------------------:
+<img src="images/mot_simple_spread.png" width="320">  |  <img src="images/mot_simple_iou_spread.png" width="320">  |  <img src="images/mot_simple_bytetrack_spread.png" width="320">
+
+### BlobBBox (bounding box tracking)
+
+Simple tracker for dense tracks |  IoU tracker for dense tracks | ByteTrack for dense tracks
+:-------------------------:|:-------------------------:|:-------------------------:
+<img src="images/mot_bbox_naive.png" width="320">  |  <img src="images/mot_bbox_iou_naive.png" width="320">  |  <img src="images/mot_bbox_bytetrack_naive.png" width="320">
+
+Simple tracker for spread tracks |  IoU tracker for spread tracks | ByteTrack for spread tracks
+:-------------------------:|:-------------------------:|:-------------------------:
+<img src="images/mot_bbox_spread.png" width="320">  |  <img src="images/mot_bbox_iou_spread.png" width="320">  |  <img src="images/mot_bbox_bytetrack_spread.png" width="320">
 
 
 ## How to use
@@ -55,6 +77,8 @@ Add dependency to your Cargo.toml file
 mot-rs = "0.3.0"
 ...
 ```
+
+### Example with SimpleBlob
 
 Let's create really synthetic example and define similar trajectories for three objects.
 We're using pretty simple MOT algorithm, so no hard tasks for now.
@@ -109,6 +133,44 @@ fn main() {
 If we plot results on a single image we should get something like:
 
 <img src="images/mot_simple_naive.png" width="720">
+
+### Example with BlobBBox
+
+If you need to track bounding box size changes (width and height), use `BlobBBox` instead:
+
+```rust
+use mot_rs::mot::{
+    SimpleTracker,
+    BlobBBox
+};
+use mot_rs::utils::Rect;
+
+fn main() {
+    // Create tracker with BlobBBox
+    let mut mot: SimpleTracker<BlobBBox> = SimpleTracker::new(5, 15.0);
+    let dt = 1.0 / 25.0; // 25 fps
+
+    // BlobBBox tracks full bounding box: center (cx, cy) and size (w - width, h - height)
+    let bbox = Rect::new(100.0, 50.0, 150.0, 60.0);
+    let blob = BlobBBox::new_with_dt(bbox, dt);
+
+    match mot.match_objects(vec![blob]) {
+        Ok(_) => {
+            for (id, obj) in &mot.objects {
+                let bbox = obj.get_bbox();
+                let (vx, vy, vw, vh) = obj.get_velocity();
+                println!("ID: {}, bbox: {:?}, velocity: ({}, {}, {}, {})",
+                    id, bbox, vx, vy, vw, vh);
+            }
+        }
+        Err(err) => println!("{:?}", err),
+    }
+}
+```
+
+If we plot results for BlobBBox case on a single image we should get something like:
+
+<img src="images/mot_bbox_naive.png" width="720">
 
 ## References
 - [Implementation of Kalman filter, Dimitrii Lopanov, 2023](https://github.com/LdDl/kalman-rs#implementation-of-discrete-kalman-filter-for-object-tracking-purposes)
