@@ -167,7 +167,7 @@ impl ByteTracker {
             .collect();
         let unmatched_track_bboxes: Vec<(Uuid, Rect)> = unmatched_track_ids
             .iter()
-            .map(|id| (*id, self.objects.get(id).unwrap().get_bbox()))
+            .map(|id| (*id, self.objects.get(id).unwrap().get_predicted_bbox_readonly()))
             .collect();
         let low_detection_indices: Vec<usize> = detections
             .iter()
