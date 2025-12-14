@@ -74,7 +74,7 @@ Add dependency to your Cargo.toml file
 
 [dependencies]
 ...
-mot-rs = "0.3.0"
+mot-rs = "0.5.0"
 ...
 ```
 
