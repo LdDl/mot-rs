@@ -107,10 +107,14 @@ impl<B: Blob> ByteTracker<B> {
             ));
         }
 
-        // Predict next positions for all existing tracks via Kalman filter
-        // for (_, track) in self.objects.iter_mut() {
-        //     track.predict_next_position();
-        // }
+        // Adopt the real interval between calls, reported through the cycle time
+        // of the incoming detections. See IoUTracker::match_objects for why
+        if let Some(first) = detections.first() {
+            let dt = first.get_dt();
+            for (_, track) in self.objects.iter_mut() {
+                track.set_dt(dt);
+            }
+        }
 
         // Get active tracks
         let active_track_ids: Vec<Uuid> = self
@@ -378,6 +382,12 @@ impl<B: Blob> ByteTracker<B> {
                     track.predict_next_position(); // Predict next position t+1
                     track.update(&detections_array[detection_idx])?; // Update with detection at t+1
                     track.reset_no_match();
+                    // Hand the track's identity back to the caller's detection, the
+                    // way IoUTracker does. Callers read the id straight off the
+                    // detections they passed in; without this every detection keeps
+                    // the throwaway id it was constructed with, so a perfectly
+                    // tracked object looks like a brand new object on every frame
+                    detections_array[detection_idx].set_id(track_id);
                     // Mark as matched
                     matched_tracks.insert(track_id);
                     matched_detections.insert(detection_idx);

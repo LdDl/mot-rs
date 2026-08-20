@@ -59,6 +59,19 @@ impl<B: Blob> IoUTracker<B> {
         &mut self,
         new_objects: &mut Vec<B>,
     ) -> Result<(), mot_errors::TrackerError> {
+        // The caller reports the real time since the previous call through the
+        // cycle time of the incoming detections. Existing tracks were built for
+        // whatever interval was current when they were created, so rebuild them
+        // for this one: predicting a moving object over a nominal 40 ms when
+        // 160 ms actually elapsed places the predicted box a whole stride short
+        // of the detection, and the match is then lost for no other reason
+        if let Some(first) = new_objects.first() {
+            let dt = first.get_dt();
+            for (_, object) in self.objects.iter_mut() {
+                object.set_dt(dt);
+            }
+        }
+
         for (_, object) in self.objects.iter_mut() {
             // Make sure that object is marked as deactivated
             object.deactivate();

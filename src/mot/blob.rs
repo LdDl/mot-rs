@@ -34,6 +34,13 @@ pub trait Blob: Clone {
     fn reset_no_match(&mut self);
     /* Entity ID (for external association) */
     fn get_entity_id(&self) -> usize;
+    /* Sampling interval */
+    /// Cycle time the underlying Kalman filter is currently built for
+    fn get_dt(&self) -> f32;
+    /// Rebuilds the filter for a new cycle time. Frames rarely arrive at exactly
+    /// the nominal rate, and a discrete filter is only valid for the interval
+    /// its transition and process-noise matrices were built for
+    fn set_dt(&mut self, dt: f32);
     /* Prediction and update */
     fn predict_next_position(&mut self);
     fn update(&mut self, measurement: &Self) -> Result<(), TrackerError>;

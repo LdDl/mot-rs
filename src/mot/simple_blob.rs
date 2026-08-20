@@ -151,6 +151,14 @@ impl SimpleBlob {
     pub fn reset_no_match(&mut self) {
         self.no_match_times = 0
     }
+    /// Cycle time the Kalman filter is currently built for
+    pub fn get_dt(&self) -> f32 {
+        self.tracker.get_dt()
+    }
+    /// Rebuilds the Kalman filter for a new cycle time
+    pub fn set_dt(&mut self, dt: f32) {
+        self.tracker.set_dt(dt)
+    }
     /// Returns predicted position without mutating state (read-only peek)
     pub fn get_predicted_position_readonly(&self) -> (f32, f32) {
         self.tracker.get_predicted_position()
@@ -277,6 +285,8 @@ impl Blob for SimpleBlob {
     fn inc_no_match(&mut self) { self.no_match_times += 1 }
     fn reset_no_match(&mut self) { self.no_match_times = 0 }
     fn get_entity_id(&self) -> usize { self.entity_id }
+    fn get_dt(&self) -> f32 { SimpleBlob::get_dt(self) }
+    fn set_dt(&mut self, dt: f32) { SimpleBlob::set_dt(self, dt) }
     fn predict_next_position(&mut self) { SimpleBlob::predict_next_position(self) }
     fn update(&mut self, measurement: &Self) -> Result<(), mot_errors::TrackerError> {
         SimpleBlob::update(self, measurement)
