@@ -4,6 +4,7 @@
 
 - [About](#about)
 - [How to use](#how-to-use)
+- [Track lifetime: frames or seconds](#track-lifetime-frames-or-seconds)
 - [References](#References)
 
 ## About
@@ -171,6 +172,27 @@ fn main() {
 If we plot results for BlobBBox case on a single image we should get something like:
 
 <img src="images/mot_bbox_naive.png" width="720">
+
+## Track lifetime: frames or seconds
+
+A tracker drops an object once it has gone unmatched for too long. By default that limit is a number of frames (`max_no_match` for `IoUTracker`/`SimpleTracker`, `max_disappeared` for `ByteTracker`). A frame count silently changes meaning whenever the effective frame rate does: every 2nd frame processed, a detector that slowed down under load, a stream that stalled - 60 frames is 2 s at one moment and 12 s at another, while an occlusion lasts the same number of seconds regardless.
+
+Switch the limit to time with `set_max_lost_seconds`:
+
+```rust
+use mot_rs::mot::{IoUTracker, BlobBBox};
+let mut tracker: IoUTracker<BlobBBox> = IoUTracker::new(60, 0.3);
+tracker.set_max_lost_seconds(2.0); // the frame limit is ignored from now on
+```
+
+The unmatched time of a track is the sum of the cycle times (`dt`) of the frames it was missed on, so it is only as good as the `dt` you report. Build detections with the real interval since the previous processed frame (`new_with_dt`), not with `1 / fps`, and on frames **without** detections call `tracker.set_dt(dt)` before `match_objects`, because there is no detection to carry it:
+
+```rust
+tracker.set_dt(dt); // every frame: real seconds since the previous processed frame
+tracker.match_objects(&mut detections)?;
+```
+
+`set_max_no_match` (`set_max_disappeared` for `ByteTracker`) switches back to the frame rule. `Blob::get_lost_seconds` exposes the accumulated unmatched time per track.
 
 ## References
 - [Implementation of Kalman filter, Dimitrii Lopanov, 2023](https://github.com/LdDl/kalman-rs#implementation-of-discrete-kalman-filter-for-object-tracking-purposes)

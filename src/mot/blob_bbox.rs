@@ -31,6 +31,7 @@ pub struct BlobBBox {
     max_track_len: usize,
     active: bool,
     no_match_times: usize,
+    lost_seconds: f32,
     diagonal: f32,
     tracker: KalmanBBox,
     entity_id: usize,
@@ -90,6 +91,7 @@ impl BlobBBox {
             max_track_len: 150,
             active: false,
             no_match_times: 0,
+            lost_seconds: 0.0,
             diagonal: _diagonal,
             tracker: kf,
             entity_id: 0,
@@ -141,6 +143,7 @@ impl BlobBBox {
             max_track_len: 150,
             active: false,
             no_match_times: 0,
+            lost_seconds: 0.0,
             diagonal: _diagonal,
             tracker: kf,
             entity_id: 0,
@@ -194,11 +197,18 @@ impl BlobBBox {
     pub fn get_no_match_times(&self) -> usize {
         self.no_match_times
     }
+    /// Registers a missed frame: one more frame, and its cycle time worth of seconds
     pub fn inc_no_match(&mut self) {
-        self.no_match_times += 1
+        self.no_match_times += 1;
+        self.lost_seconds += self.tracker.get_dt();
     }
     pub fn reset_no_match(&mut self) {
-        self.no_match_times = 0
+        self.no_match_times = 0;
+        self.lost_seconds = 0.0;
+    }
+    /// Seconds the blob has been unmatched for, see `Blob::get_lost_seconds`
+    pub fn get_lost_seconds(&self) -> f32 {
+        self.lost_seconds
     }
     pub fn track_len(&self) -> usize {
         self.track.len()
@@ -314,6 +324,7 @@ impl BlobBBox {
         self.entity_id = newb.entity_id;
         self.active = true;
         self.no_match_times = 0;
+        self.lost_seconds = 0.0;
 
         // Update track
         self.track.push(self.current_center.clone());
@@ -353,8 +364,9 @@ impl Blob for BlobBBox {
     fn activate(&mut self) { self.active = true }
     fn deactivate(&mut self) { self.active = false }
     fn get_no_match_times(&self) -> usize { self.no_match_times }
-    fn inc_no_match(&mut self) { self.no_match_times += 1 }
-    fn reset_no_match(&mut self) { self.no_match_times = 0 }
+    fn inc_no_match(&mut self) { BlobBBox::inc_no_match(self) }
+    fn reset_no_match(&mut self) { BlobBBox::reset_no_match(self) }
+    fn get_lost_seconds(&self) -> f32 { self.lost_seconds }
     fn get_entity_id(&self) -> usize { self.entity_id }
     fn get_dt(&self) -> f32 { BlobBBox::get_dt(self) }
     fn set_dt(&mut self, dt: f32) { BlobBBox::set_dt(self, dt) }
@@ -476,5 +488,23 @@ mod tests {
         assert!(vy > 0.0, "Velocity Y should be positive");
         assert!(vw > 0.0, "Velocity W should be positive");
         assert!(vh > 0.0, "Velocity H should be positive");
+    }
+
+    #[test]
+    fn test_lost_seconds_follow_dt() {
+        use crate::utils::Rect;
+        let mut blob = BlobBBox::new_with_dt(Rect::new(0.0, 0.0, 10.0, 10.0), 0.25);
+        assert_eq!(blob.get_lost_seconds(), 0.0);
+        blob.inc_no_match();
+        blob.inc_no_match();
+        assert_eq!(blob.get_no_match_times(), 2);
+        assert!((blob.get_lost_seconds() - 0.5).abs() < 1e-6);
+        // A new cycle time changes what the next miss is worth, not what was accumulated
+        blob.set_dt(1.0);
+        blob.inc_no_match();
+        assert!((blob.get_lost_seconds() - 1.5).abs() < 1e-6);
+        blob.reset_no_match();
+        assert_eq!(blob.get_no_match_times(), 0);
+        assert_eq!(blob.get_lost_seconds(), 0.0);
     }
 }

@@ -32,6 +32,11 @@ pub trait Blob: Clone {
     fn get_no_match_times(&self) -> usize;
     fn inc_no_match(&mut self);
     fn reset_no_match(&mut self);
+    /// How long the object has been unmatched, in seconds: the cycle times of
+    /// the consecutive frames it was missed on, summed. Reset by a match.
+    /// Unlike `get_no_match_times` it keeps its meaning when the effective frame
+    /// rate changes (frame skipping, a throttled detector, a stalled stream)
+    fn get_lost_seconds(&self) -> f32;
     /* Entity ID (for external association) */
     fn get_entity_id(&self) -> usize;
     /* Sampling interval */

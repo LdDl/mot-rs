@@ -16,6 +16,7 @@ pub struct SimpleBlob {
     max_track_len: usize,
     active: bool,
     no_match_times: usize,
+    lost_seconds: f32,
     diagonal: f32,
     tracker: Kalman2D,
     entity_id: usize,
@@ -51,6 +52,7 @@ impl SimpleBlob {
             max_track_len: 150,
             active: false,
             no_match_times: 0,
+            lost_seconds: 0.0,
             diagonal: _diagonal,
             tracker: kf,
             entity_id: 0,
@@ -91,6 +93,7 @@ impl SimpleBlob {
             max_track_len: 150,
             active: false,
             no_match_times: 0,
+            lost_seconds: 0.0,
             diagonal: _diagonal,
             tracker: kf,
             entity_id: 0,
@@ -145,11 +148,18 @@ impl SimpleBlob {
     pub fn get_no_match_times(&self) -> usize {
         self.no_match_times
     }
+    /// Registers a missed frame: one more frame, and its cycle time worth of seconds
     pub fn inc_no_match(&mut self) {
-        self.no_match_times += 1
+        self.no_match_times += 1;
+        self.lost_seconds += self.tracker.get_dt();
     }
     pub fn reset_no_match(&mut self) {
-        self.no_match_times = 0
+        self.no_match_times = 0;
+        self.lost_seconds = 0.0;
+    }
+    /// Seconds the blob has been unmatched for, see `Blob::get_lost_seconds`
+    pub fn get_lost_seconds(&self) -> f32 {
+        self.lost_seconds
     }
     /// Cycle time the Kalman filter is currently built for
     pub fn get_dt(&self) -> f32 {
@@ -248,6 +258,7 @@ impl SimpleBlob {
         self.diagonal = newb.diagonal;
         self.active = true;
         self.no_match_times = 0;
+        self.lost_seconds = 0.0;
 
         // Update track
         self.track.push(self.current_center.clone());
@@ -282,8 +293,9 @@ impl Blob for SimpleBlob {
     fn activate(&mut self) { self.active = true }
     fn deactivate(&mut self) { self.active = false }
     fn get_no_match_times(&self) -> usize { self.no_match_times }
-    fn inc_no_match(&mut self) { self.no_match_times += 1 }
-    fn reset_no_match(&mut self) { self.no_match_times = 0 }
+    fn inc_no_match(&mut self) { SimpleBlob::inc_no_match(self) }
+    fn reset_no_match(&mut self) { SimpleBlob::reset_no_match(self) }
+    fn get_lost_seconds(&self) -> f32 { self.lost_seconds }
     fn get_entity_id(&self) -> usize { self.entity_id }
     fn get_dt(&self) -> f32 { SimpleBlob::get_dt(self) }
     fn set_dt(&mut self, dt: f32) { SimpleBlob::set_dt(self, dt) }
@@ -293,4 +305,27 @@ impl Blob for SimpleBlob {
     }
     fn distance_to(&self, other: &Self) -> f32 { SimpleBlob::distance_to(self, other) }
     fn distance_to_predicted(&self, other: &Self) -> f32 { SimpleBlob::distance_to_predicted(self, other) }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_lost_seconds_follow_dt() {
+        use crate::utils::Rect;
+        let mut blob = SimpleBlob::new_with_dt(Rect::new(0.0, 0.0, 10.0, 10.0), 0.25);
+        assert_eq!(blob.get_lost_seconds(), 0.0);
+        blob.inc_no_match();
+        blob.inc_no_match();
+        assert_eq!(blob.get_no_match_times(), 2);
+        assert!((blob.get_lost_seconds() - 0.5).abs() < 1e-6);
+        // A new cycle time changes what the next miss is worth, not what was accumulated
+        blob.set_dt(1.0);
+        blob.inc_no_match();
+        assert!((blob.get_lost_seconds() - 1.5).abs() < 1e-6);
+        blob.reset_no_match();
+        assert_eq!(blob.get_no_match_times(), 0);
+        assert_eq!(blob.get_lost_seconds(), 0.0);
+    }
 }

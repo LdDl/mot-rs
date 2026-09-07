@@ -9,6 +9,8 @@ use uuid::Uuid;
 pub struct SimpleTracker<B: Blob> {
     // Max no match (max number of frames when object could not be found again). Default is 75
     max_no_match: usize,
+    // When set, tracks expire by unmatched time instead of by `max_no_match` frames. Default is None
+    max_lost_seconds: Option<f32>,
     // Threshold distance (most of time in pixels). Default 30.0
     min_dist_threshold: f32,
     // Storage
@@ -27,6 +29,7 @@ impl<B: Blob> SimpleTracker<B> {
     pub fn default() -> Self {
         SimpleTracker {
             max_no_match: 75,
+            max_lost_seconds: None,
             min_dist_threshold: 30.0,
             objects: HashMap::new(),
         }
@@ -44,8 +47,42 @@ impl<B: Blob> SimpleTracker<B> {
     pub fn new(_max_no_match: usize, _min_dist_threshold: f32) -> Self {
         SimpleTracker {
             max_no_match: _max_no_match,
+            max_lost_seconds: None,
             min_dist_threshold: _min_dist_threshold,
             objects: HashMap::new(),
+        }
+    }
+    /// Switches track expiry from a frame count to time: a track is removed once
+    /// it has been unmatched for more than `seconds`. A frame count changes
+    /// meaning whenever the effective frame rate does - frame skipping, a
+    /// throttled detector, a stalled stream - while an occlusion lasts the same
+    /// number of seconds regardless. Non-positive values are ignored
+    pub fn set_max_lost_seconds(&mut self, seconds: f32) {
+        if seconds > 0.0 {
+            self.max_lost_seconds = Some(seconds);
+        }
+    }
+    /// Switches track expiry back to a frame count (an object is removed after more than `max_no_match` missed frames)
+    pub fn set_max_no_match(&mut self, max_no_match: usize) {
+        self.max_no_match = max_no_match;
+        self.max_lost_seconds = None;
+    }
+    /// Time-based expiry limit, if enabled
+    pub fn get_max_lost_seconds(&self) -> Option<f32> {
+        self.max_lost_seconds
+    }
+    /// Frame-based expiry limit; in effect only while `get_max_lost_seconds` is `None`
+    pub fn get_max_no_match(&self) -> usize {
+        self.max_no_match
+    }
+    /// Rebuilds every track for a new cycle time. `match_objects` does the same
+    /// from the first detection it receives, but a frame without detections
+    /// carries none, so call this before it: otherwise on such frames the
+    /// tracks are predicted and expired over whatever interval the previous
+    /// frame had, not the real one
+    pub fn set_dt(&mut self, dt: f32) {
+        for (_, object) in self.objects.iter_mut() {
+            object.set_dt(dt);
         }
     }
     // Matches new objects to existing ones
@@ -123,10 +160,15 @@ impl<B: Blob> SimpleTracker<B> {
         self.objects.extend(blobs_to_register);
 
         // Clean up existing data
+        let max_no_match = self.max_no_match;
+        let max_lost_seconds = self.max_lost_seconds;
         self.objects.retain(|_, object| {
             object.inc_no_match();
             // Remove object if it was not found for a long time
-            let delete = object.get_no_match_times() > self.max_no_match;
+            let delete = match max_lost_seconds {
+                Some(seconds) => object.get_lost_seconds() > seconds,
+                None => object.get_no_match_times() > max_no_match,
+            };
             !delete // <- if we want to keep object closure should return true
         });
         Ok(())
@@ -323,5 +365,85 @@ mod tests {
         //     }
         //     println!();
         // }
+    }
+
+    /// With a time limit the track must go when its unmatched time exceeds the
+    /// limit, no matter how generous the frame limit is
+    #[test]
+    fn test_expiry_by_seconds_simple() {
+        let dt = 0.5;
+        let mut tracker = crate::mot::SimpleTracker::<crate::mot::SimpleBlob>::new(1000, 30.0);
+        tracker.set_max_lost_seconds(1.0);
+        assert_eq!(tracker.get_max_lost_seconds(), Some(1.0));
+        let mut frame = vec![crate::mot::SimpleBlob::new_with_dt(
+            crate::utils::Rect::new(10.0, 10.0, 20.0, 20.0),
+            dt,
+        )];
+        tracker.match_objects(&mut frame).unwrap();
+        assert_eq!(tracker.objects.len(), 1);
+        // The object vanishes. Each empty frame adds dt to the lost time; the
+        // track must survive exactly as long as that stays within the limit
+        let mut empty_frames = 0;
+        while !tracker.objects.is_empty() {
+            let lost = tracker.objects.values().next().unwrap().get_lost_seconds();
+            assert!(lost <= 1.0, "track kept while lost for {lost} s > 1 s");
+            let mut empty = vec![];
+            tracker.match_objects(&mut empty).unwrap();
+            empty_frames += 1;
+            assert!(empty_frames <= 3, "track not expired by time after {empty_frames} empty frames");
+        }
+        assert!(empty_frames >= 2, "track expired too early, after {empty_frames} empty frames");
+    }
+
+    /// A frame without detections carries no dt, so the tracker must be told the
+    /// real interval explicitly for the lost time to be counted right
+    #[test]
+    fn test_set_dt_on_empty_frames_simple() {
+        let nominal_dt = 0.1;
+        let mut with_set_dt = crate::mot::SimpleTracker::<crate::mot::SimpleBlob>::new(1000, 30.0);
+        with_set_dt.set_max_lost_seconds(1.0);
+        let mut without_set_dt = crate::mot::SimpleTracker::<crate::mot::SimpleBlob>::new(1000, 30.0);
+        without_set_dt.set_max_lost_seconds(1.0);
+        for tracker in [&mut with_set_dt, &mut without_set_dt] {
+            let mut frame = vec![crate::mot::SimpleBlob::new_with_dt(
+                crate::utils::Rect::new(10.0, 10.0, 20.0, 20.0),
+                nominal_dt,
+            )];
+            tracker.match_objects(&mut frame).unwrap();
+            assert_eq!(tracker.objects.len(), 1);
+        }
+        // Frames now arrive every 0.5 s instead of 0.1 s and the object is gone
+        for _ in 0..4 {
+            let mut empty = vec![];
+            let tracker = &mut with_set_dt;
+            tracker.set_dt(0.5);
+            tracker.match_objects(&mut empty).unwrap();
+            let mut empty = vec![];
+            let tracker = &mut without_set_dt;
+            tracker.match_objects(&mut empty).unwrap();
+        }
+        assert!(with_set_dt.objects.is_empty(), "told the real interval: 4 × 0.5 s > 1 s, must be gone");
+        assert_eq!(without_set_dt.objects.len(), 1, "still on the nominal interval: 4 × 0.1 s < 1 s, must be kept");
+    }
+
+    /// Without a time limit the frame rule is untouched
+    #[test]
+    fn test_expiry_by_frames_unchanged_simple() {
+        let mut tracker = crate::mot::SimpleTracker::<crate::mot::SimpleBlob>::new(1000, 30.0);
+        assert_eq!(tracker.get_max_lost_seconds(), None);
+        let mut frame = vec![crate::mot::SimpleBlob::new_with_dt(
+            crate::utils::Rect::new(10.0, 10.0, 20.0, 20.0),
+            100.0,
+        )];
+        tracker.match_objects(&mut frame).unwrap();
+        // Huge dt, but the frame rule does not care: two empty frames are within 1000
+        for _ in 0..2 {
+            let mut empty = vec![];
+            tracker.match_objects(&mut empty).unwrap();
+        }
+        assert_eq!(tracker.objects.len(), 1);
+        // Non-positive limits are ignored, the frame rule stays in effect
+        tracker.set_max_lost_seconds(0.0);
+        assert_eq!(tracker.get_max_lost_seconds(), None);
     }
 }
