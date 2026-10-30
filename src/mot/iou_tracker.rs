@@ -154,8 +154,6 @@ impl IoUTracker {
             }
         }
 
-        self.objects.extend(blobs_to_register);
-
         // Handle unmatched objects (predict forward for track maintenance)
         for (id, object) in self.objects.iter_mut() {
             if !reserved_objects.contains(id) {
@@ -163,6 +161,10 @@ impl IoUTracker {
                 object.inc_no_match();
             }
         }
+
+        // A new object starts at its detection in this frame, so it is registered only after the
+        // unmatched objects were handled: it is neither counted as missed nor moved forward.
+        self.objects.extend(blobs_to_register);
 
         // Clean up existing data
         self.objects.retain(|_, object| {
@@ -188,6 +190,27 @@ impl fmt::Display for IoUTracker {
 mod tests {
     use crate::utils::Rect;
     use std::collections::BinaryHeap;
+
+    #[test]
+    fn match_objects_does_not_count_new_object_as_missed_in_the_frame_that_starts_it() {
+        let mut tracker = super::IoUTracker::default();
+        let mut blobs = vec![super::SimpleBlob::new_with_dt(
+            Rect::new(10.0, 20.0, 30.0, 40.0),
+            0.04,
+        )];
+
+        tracker.match_objects(&mut blobs).unwrap();
+
+        // The tracker has no objects yet, so the detection starts a new object. It matches its
+        // own detection in this frame, so it was not missed.
+        let no_match_times: Vec<usize> = tracker
+            .objects
+            .values()
+            .map(|object| object.get_no_match_times())
+            .collect();
+        assert_eq!(no_match_times, [0]);
+    }
+
     #[test]
     fn test_match_objects_spread() {
         let bboxes_iterations: Vec<Vec<Rect>> = vec![
