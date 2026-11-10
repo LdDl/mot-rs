@@ -1,8 +1,8 @@
-use std::collections::{BinaryHeap, HashMap, HashSet};
+use std::collections::{HashMap, HashSet};
 
 use crate::mot::blob::Blob;
+use crate::mot::greedy_matching::greedy_matching;
 use crate::mot::mot_errors;
-use crate::mot::DistanceBlob;
 use uuid::Uuid;
 
 /// Naive implementation of Multi-object tracker (MOT)
@@ -86,25 +86,6 @@ impl<B: Blob> SimpleTracker<B> {
         }
     }
 
-    fn best_available_match(&self, detection: &B, reserved: &HashSet<Uuid>) -> Option<(Uuid, f32)> {
-        let mut best_match = None;
-        let mut min_distance = f32::MAX;
-        for (id, object) in self.objects.iter() {
-            if reserved.contains(id) {
-                continue;
-            }
-            let distance = detection.distance_to(object);
-            // Compare against the current frame's prediction without advancing the filter.
-            let predicted_distance = detection.distance_to_predicted(object);
-            let distance = f32::min(distance, predicted_distance);
-            if distance < min_distance {
-                min_distance = distance;
-                best_match = Some((*id, distance));
-            }
-        }
-        best_match
-    }
-
     // Matches new objects to existing ones
     pub fn match_objects(
         &mut self,
@@ -118,65 +99,55 @@ impl<B: Blob> SimpleTracker<B> {
         for (_, object) in self.objects.iter_mut() {
             object.deactivate();
         }
-        let mut blobs_to_register: HashMap<Uuid, B> = HashMap::new();
-        // Each existing track can receive only one detection per frame.
-        let mut reserved_objects: HashSet<Uuid> = HashSet::new();
-
-        // Add new objects to priority queue
-        let mut priority_queue: BinaryHeap<DistanceBlob<B>> = BinaryHeap::new();
-        for new_object in new_objects.iter_mut() {
-            let Some((min_id, min_distance)) =
-                self.best_available_match(new_object, &reserved_objects)
-            else {
-                blobs_to_register.insert(new_object.get_id(), new_object.clone());
-                continue;
-            };
-            let distance_blob = DistanceBlob {
-                distance_metric_value: min_distance,
-                min_id,
-                blob: new_object,
-            };
-            priority_queue.push(distance_blob);
+        let tracks: Vec<_> = if new_objects.is_empty() {
+            Vec::new()
+        } else {
+            self.objects.iter().collect()
+        };
+        let candidates = new_objects
+            .iter()
+            .map(|detection| {
+                let mut row = Vec::new();
+                let diagonal_threshold = detection.get_diagonal() * 0.5;
+                for (index, (_, object)) in tracks.iter().enumerate() {
+                    // Preserve custom Blob distance metrics and evaluate each pair only once.
+                    let distance = f32::min(
+                        detection.distance_to(object),
+                        detection.distance_to_predicted(object),
+                    );
+                    if distance < f32::MAX
+                        && (distance < diagonal_threshold || distance < self.min_dist_threshold)
+                    {
+                        row.push((index, distance));
+                    }
+                }
+                row
+            })
+            .collect();
+        let matches = greedy_matching(candidates, tracks.len());
+        let track_ids: Vec<_> = tracks.into_iter().map(|(id, _)| *id).collect();
+        let mut reserved_objects = HashSet::with_capacity(matches.len());
+        let mut matched_detections = vec![false; new_objects.len()];
+        for (detection_index, track_index) in matches {
+            let id = track_ids[track_index];
+            let track = self.objects.get_mut(&id).ok_or_else(|| {
+                mot_errors::TrackerError::from(mot_errors::NoObjectInTracker {
+                    txt: format!("Object ID {:?} is missing from tracker", id),
+                })
+            })?;
+            let detection = &mut new_objects[detection_index];
+            track.predict_next_position();
+            track.update(detection)?;
+            track.reset_no_match();
+            detection.set_id(id);
+            reserved_objects.insert(id);
+            matched_detections[detection_index] = true;
         }
 
-        while let Some(mut distance_blob) = priority_queue.pop() {
-            let min_distance = distance_blob.distance_metric_value;
-            let min_id = distance_blob.min_id;
-
-            if reserved_objects.contains(&min_id) {
-                if let Some((id, distance)) =
-                    self.best_available_match(distance_blob.blob, &reserved_objects)
-                {
-                    distance_blob.min_id = id;
-                    distance_blob.distance_metric_value = distance;
-                    // Retry at the new distance so better pending matches keep priority.
-                    priority_queue.push(distance_blob);
-                } else {
-                    blobs_to_register.insert(distance_blob.blob.get_id(), distance_blob.blob.clone());
-                }
-                continue;
-            }
-            // Additional check to filter objects
-            if min_distance < distance_blob.blob.get_diagonal() * 0.5
-                || min_distance < self.min_dist_threshold
-            {
-                match self.objects.get_mut(&min_id) {
-                    Some(v) => {
-                        v.predict_next_position();
-                        v.update(&distance_blob.blob)?;
-                        v.reset_no_match();
-                        // Last but not least:
-                        // We need to update ID of new object to match existing one (that is why we have &mut in function definition)
-                        distance_blob.blob.set_id(min_id);
-                        reserved_objects.insert(min_id);
-                    }
-                    None => {
-                        return Err(mot_errors::TrackerError::from(mot_errors::NoObjectInTracker{txt: format!("immposible self.objects.get_mut(&min_id). Object ID {:?}. Distance value: {:?}", min_id, min_distance)}));
-                    }
-                };
-            } else {
-                // Otherwise register object as a new one
-                blobs_to_register.insert(distance_blob.blob.get_id(), distance_blob.blob.clone());
+        let mut blobs_to_register = HashMap::new();
+        for (index, detection) in new_objects.iter().enumerate() {
+            if !matched_detections[index] {
+                blobs_to_register.insert(detection.get_id(), detection.clone());
             }
         }
 
