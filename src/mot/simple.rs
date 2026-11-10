@@ -142,6 +142,7 @@ impl<B: Blob> SimpleTracker<B> {
                 match self.objects.get_mut(&min_id) {
                     Some(v) => {
                         v.update(&distance_blob.blob)?;
+                        v.reset_no_match();
                         // Last but not least:
                         // We need to update ID of new object to match existing one (that is why we have &mut in function definition)
                         distance_blob.blob.set_id(min_id);
@@ -157,13 +158,19 @@ impl<B: Blob> SimpleTracker<B> {
             }
         }
 
+        // Count misses only for existing tracks without a detection this frame.
+        for (id, object) in self.objects.iter_mut() {
+            if !reserved_objects.contains(id) {
+                object.inc_no_match();
+            }
+        }
+
         self.objects.extend(blobs_to_register);
 
         // Clean up existing data
         let max_no_match = self.max_no_match;
         let max_lost_seconds = self.max_lost_seconds;
         self.objects.retain(|_, object| {
-            object.inc_no_match();
             // Remove object if it was not found for a long time
             let delete = match max_lost_seconds {
                 Some(seconds) => object.get_lost_seconds() > seconds,
@@ -186,10 +193,146 @@ impl<B: Blob> fmt::Display for SimpleTracker<B> {
     }
 }
 
+#[cfg(test)]
 mod tests {
     use crate::mot::blob::Blob;
     use crate::mot::test_data::{bbox_to_rect, get_naive_data, get_spread_data};
     use crate::mot::{BlobBBox, SimpleBlob};
+    use crate::utils::Rect;
+
+    fn check_missed_frame_counters<B: Blob>(new_blob: fn(Rect, f32) -> B) {
+        let bbox = Rect::new(100.0, 200.0, 30.0, 40.0);
+        let dt = 0.125;
+        let mut tracker = super::SimpleTracker::default();
+        let mut frame = vec![new_blob(bbox.clone(), dt)];
+        let id = frame[0].get_id();
+
+        tracker.match_objects(&mut frame).unwrap();
+        let track = tracker.objects.get(&id).unwrap();
+        assert_eq!(track.get_no_match_times(), 0);
+        assert_eq!(track.get_lost_seconds(), 0.0);
+
+        for _ in 0..3 {
+            let mut frame = vec![new_blob(bbox.clone(), dt)];
+            tracker.match_objects(&mut frame).unwrap();
+            assert_eq!(frame[0].get_id(), id);
+            assert_eq!(tracker.objects.len(), 1);
+            let track = tracker.objects.get(&id).unwrap();
+            assert_eq!(track.get_no_match_times(), 0);
+            assert_eq!(track.get_lost_seconds(), 0.0);
+        }
+
+        for missed_frames in 1..=2 {
+            tracker.match_objects(&mut vec![]).unwrap();
+            let track = tracker.objects.get(&id).unwrap();
+            assert_eq!(track.get_no_match_times(), missed_frames);
+            assert_eq!(track.get_lost_seconds(), missed_frames as f32 * dt);
+        }
+
+        let mut frame = vec![new_blob(bbox, dt)];
+        tracker.match_objects(&mut frame).unwrap();
+        assert_eq!(frame[0].get_id(), id);
+        assert_eq!(tracker.objects.len(), 1);
+        let track = tracker.objects.get(&id).unwrap();
+        assert_eq!(track.get_no_match_times(), 0);
+        assert_eq!(track.get_lost_seconds(), 0.0);
+
+        tracker.match_objects(&mut vec![]).unwrap();
+        let track = tracker.objects.get(&id).unwrap();
+        assert_eq!(track.get_no_match_times(), 1);
+        assert_eq!(track.get_lost_seconds(), dt);
+    }
+
+    #[test]
+    fn test_missed_frame_counters() {
+        check_missed_frame_counters(SimpleBlob::new_with_dt);
+        check_missed_frame_counters(BlobBBox::new_with_dt);
+    }
+
+    fn check_only_unmatched_tracks_count_as_missed<B: Blob>(new_blob: fn(Rect, f32) -> B) {
+        let dt = 0.125;
+        let matched_bbox = Rect::new(100.0, 200.0, 30.0, 40.0);
+        let mut frame = vec![
+            new_blob(matched_bbox.clone(), dt),
+            new_blob(Rect::new(1000.0, 200.0, 30.0, 40.0), dt),
+        ];
+        let matched_id = frame[0].get_id();
+        let missed_id = frame[1].get_id();
+        let mut tracker = super::SimpleTracker::default();
+        tracker.match_objects(&mut frame).unwrap();
+
+        let mut frame = vec![
+            new_blob(matched_bbox, dt),
+            new_blob(Rect::new(2000.0, 200.0, 30.0, 40.0), dt),
+        ];
+        let new_id = frame[1].get_id();
+        tracker.match_objects(&mut frame).unwrap();
+
+        assert_eq!(frame[0].get_id(), matched_id);
+        assert_eq!(frame[1].get_id(), new_id);
+        assert_eq!(tracker.objects.len(), 3);
+        for id in [matched_id, new_id] {
+            let track = tracker.objects.get(&id).unwrap();
+            assert_eq!(track.get_no_match_times(), 0);
+            assert_eq!(track.get_lost_seconds(), 0.0);
+        }
+        let track = tracker.objects.get(&missed_id).unwrap();
+        assert_eq!(track.get_no_match_times(), 1);
+        assert_eq!(track.get_lost_seconds(), dt);
+    }
+
+    #[test]
+    fn test_only_unmatched_tracks_count_as_missed() {
+        check_only_unmatched_tracks_count_as_missed(SimpleBlob::new_with_dt);
+        check_only_unmatched_tracks_count_as_missed(BlobBBox::new_with_dt);
+    }
+
+    fn check_detected_track_survives_limit<B: Blob>(
+        mut tracker: super::SimpleTracker<B>,
+        new_blob: fn(Rect, f32) -> B,
+    ) {
+        let bbox = Rect::new(100.0, 200.0, 30.0, 40.0);
+        let dt = 0.125;
+        let mut frame = vec![new_blob(bbox.clone(), dt)];
+        let id = frame[0].get_id();
+
+        tracker.match_objects(&mut frame).unwrap();
+        assert!(tracker.objects.contains_key(&id));
+
+        for _ in 0..3 {
+            let mut frame = vec![new_blob(bbox.clone(), dt)];
+            tracker.match_objects(&mut frame).unwrap();
+            assert_eq!(frame[0].get_id(), id);
+            assert_eq!(tracker.objects.len(), 1);
+            assert!(tracker.objects.contains_key(&id));
+        }
+
+        tracker.match_objects(&mut vec![]).unwrap();
+        assert!(tracker.objects.is_empty());
+    }
+
+    #[test]
+    fn test_detected_track_survives_zero_frame_limit() {
+        check_detected_track_survives_limit(
+            super::SimpleTracker::new(0, 30.0),
+            SimpleBlob::new_with_dt,
+        );
+        check_detected_track_survives_limit(
+            super::SimpleTracker::new(0, 30.0),
+            BlobBBox::new_with_dt,
+        );
+    }
+
+    #[test]
+    fn test_detected_track_survives_short_time_limit() {
+        let mut simple_tracker = super::SimpleTracker::default();
+        simple_tracker.set_max_lost_seconds(0.0625);
+        check_detected_track_survives_limit(simple_tracker, SimpleBlob::new_with_dt);
+
+        let mut bbox_tracker = super::SimpleTracker::default();
+        bbox_tracker.set_max_lost_seconds(0.0625);
+        check_detected_track_survives_limit(bbox_tracker, BlobBBox::new_with_dt);
+    }
 
     #[test]
     fn test_match_objects_spread() {
