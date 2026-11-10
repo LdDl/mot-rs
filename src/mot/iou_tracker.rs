@@ -1,9 +1,8 @@
-use std::cmp::Reverse;
-use std::collections::{BinaryHeap, HashMap, HashSet};
+use std::collections::{HashMap, HashSet};
 
 use crate::mot::blob::Blob;
+use crate::mot::greedy_matching::greedy_matching;
 use crate::mot::mot_errors;
-use crate::mot::DistanceBlob;
 use crate::utils::{
     iou,
     Point,
@@ -91,6 +90,7 @@ impl<B: Blob> IoUTracker<B> {
             object.set_dt(dt);
         }
     }
+
     // Matches new objects to existing ones
     pub fn match_objects(
         &mut self,
@@ -113,98 +113,71 @@ impl<B: Blob> IoUTracker<B> {
             // Make sure that object is marked as deactivated
             object.deactivate();
         }
-        let mut blobs_to_register: HashMap<Uuid, B> = HashMap::new();
-
-        // Add new objects to priority queue
-        let mut priority_queue: BinaryHeap<Reverse<DistanceBlob<B>>> = BinaryHeap::new();
-        // Calculate IoU using PREDICTED positions
-        for new_object in new_objects.iter_mut() {
-            // Find existing blob with min distance to new one
-            let mut max_id = Uuid::default();
-            let mut max_iou = 0.0;
-
-            // Simple IoU matching (for restospective)
-            // for (j, object) in self.objects.iter() {
-            //     // let iou_value = iou(&new_object.get_bbox(), &object.get_bbox());
-            //     // Use predicted bbox for better matching
-            //     let predicted_bbox = object.get_predicted_bbox_readonly();
-            //     let iou_value = iou(&new_object.get_bbox(), &predicted_bbox);
-            //     if iou_value > max_iou {
-            //         max_iou = iou_value;
-            //         max_id = *j;
-            //     }
-            // }
-
-            // Hybrid IoU + Distance matching (for better recovery when IoU is zero)
-            for (j, object) in self.objects.iter() {
-                let predicted_bbox = object.get_predicted_bbox_readonly();
-                let iou_value = iou(&new_object.get_bbox(), &predicted_bbox);
-                // Add distance-based fallback
-                let predicted_center = Point::new(
-                    predicted_bbox.x + predicted_bbox.width / 2.0,
-                    predicted_bbox.y + predicted_bbox.height / 2.0
-                );
-                let distance = euclidean_distance(&predicted_center, &new_object.get_center());
-                // Convert to 0-1 similarity
-                let distance_score = 1.0 / (1.0 + distance * 0.01);
-                // Combine IoU and distance (favor IoU when available, fallback to distance)
-                let combined_score = if iou_value > 0.05 { 
-                    iou_value * 0.8 + distance_score * 0.2
-                } else {
-                    // Lower weight for pure distance matching
-                    distance_score * 0.5
-                };
-                if combined_score > max_iou {
-                    max_iou = combined_score;
-                    max_id = *j;
+        // Prediction is shared by every detection in this frame.
+        let predicted_tracks: Vec<_> = if new_objects.is_empty() {
+            Vec::new()
+        } else {
+            self.objects
+                .iter()
+                .map(|(id, object)| {
+                    let bbox = object.get_predicted_bbox_readonly();
+                    let center = Point::new(
+                        bbox.x + bbox.width / 2.0,
+                        bbox.y + bbox.height / 2.0,
+                    );
+                    (*id, bbox, center)
+                })
+                .collect()
+        };
+        let candidates = new_objects
+            .iter()
+            .map(|detection| {
+                let mut row = Vec::new();
+                let bbox = detection.get_bbox();
+                let center = detection.get_center();
+                for (index, (_, predicted_bbox, predicted_center)) in
+                    predicted_tracks.iter().enumerate()
+                {
+                    let iou_value = iou(&bbox, predicted_bbox);
+                    let distance = euclidean_distance(predicted_center, &center);
+                    let distance_score = 1.0 / (1.0 + distance * 0.01);
+                    // Favor IoU when available, with a lower weight for pure distance matching.
+                    let score = if iou_value > 0.05 {
+                        iou_value * 0.8 + distance_score * 0.2
+                    } else {
+                        distance_score * 0.5
+                    };
+                    if score > 0.0 && score > self.iou_threshold {
+                        // The matcher minimizes cost, so larger similarities use smaller costs.
+                        row.push((index, -score));
+                    }
                 }
-            }
-            let distance_blob = DistanceBlob {
-                distance_metric_value: max_iou,
-                min_id: max_id,
-                blob: new_object,
-            };
-            priority_queue.push(Reverse(distance_blob));
+                row
+            })
+            .collect();
+        let matches = greedy_matching(candidates, predicted_tracks.len());
+        let mut reserved_objects = HashSet::with_capacity(matches.len());
+        let mut matched_detections = vec![false; new_objects.len()];
+        for (detection_index, track_index) in matches {
+            let id = predicted_tracks[track_index].0;
+            let track = self.objects.get_mut(&id).ok_or_else(|| {
+                mot_errors::TrackerError::from(mot_errors::NoObjectInTracker {
+                    txt: format!("Object ID {:?} is missing from tracker", id),
+                })
+            })?;
+            let detection = &mut new_objects[detection_index];
+            track.predict_next_position();
+            track.update(detection)?;
+            track.reset_no_match();
+            detection.set_id(id);
+            reserved_objects.insert(id);
+            matched_detections[detection_index] = true;
         }
 
-        // We need to prevent double update of objects
-        let mut reserved_objects: HashSet<Uuid> = HashSet::new();
-
-        // Process matches with correct temporal order
-        while let Some(distance_blob) = priority_queue.pop() {
-            let max_iou = distance_blob.0.distance_metric_value;
-            let min_id = distance_blob.0.min_id;
-
-            // Check if object is already reserved
-            // Since we are using priority queue with min-heap then we garantee that we will update existing objects with min distance only once.
-            // For other objects with the same min_id we can create new objects
-            if reserved_objects.contains(&min_id) {
-                // Register it immediately and continue
-                blobs_to_register
-                    .insert(distance_blob.0.blob.get_id(), distance_blob.0.blob.clone());
-                continue;
-            }
-            // Filter by min IoU threshold
-            if max_iou > self.iou_threshold {
-                match self.objects.get_mut(&min_id) {
-                    Some(v) => {
-                        // Advance time and update in correct order:
-                        v.predict_next_position(); // Advance Kalman to t+1
-                        v.update(&distance_blob.0.blob)?; // Update with measurement from t+1
-                        v.reset_no_match();
-                        // Last but not least:
-                        // We need to update ID of new object to match existing one (that is why we have &mut in function definition)
-                        distance_blob.0.blob.set_id(min_id);
-                        reserved_objects.insert(min_id);
-                    },
-                    None => {
-                        return Err(mot_errors::TrackerError::from(mot_errors::NoObjectInTracker{txt: format!("immposible self.objects.get_mut(&min_id). Object ID {:?}. IoU value: {:?}", min_id, max_iou)}));
-                    }
-                };
-            } else {
-                // Otherwise register object as a new one
-                blobs_to_register
-                    .insert(distance_blob.0.blob.get_id(), distance_blob.0.blob.clone());
+        let mut blobs_to_register = HashMap::new();
+        for (index, detection) in new_objects.iter().enumerate() {
+            if !matched_detections[index] {
+                blobs_to_register.insert(detection.get_id(), detection.clone());
             }
         }
 
@@ -252,6 +225,79 @@ mod tests {
     use crate::mot::test_data::{bbox_to_rect, get_naive_data, get_spread_data};
     use crate::mot::{BlobBBox, SimpleBlob};
     use crate::utils::Rect;
+
+    fn check_competing_detections<B: Blob>(
+        new_blob: fn(Rect, f32) -> B,
+        track_positions: &[f32],
+        detections: &[(f32, Option<usize>)],
+    ) {
+        use itertools::Itertools;
+        use std::collections::HashSet;
+
+        for detections in detections.iter().permutations(detections.len()) {
+            let dt = 0.04;
+            let mut tracker = super::IoUTracker::new(5, 0.3);
+            let mut frame: Vec<B> = track_positions
+                .iter()
+                .map(|&x| new_blob(Rect::new(x, 100.0, 100.0, 100.0), dt))
+                .collect();
+            let track_ids: Vec<_> = frame.iter().map(Blob::get_id).collect();
+            tracker.match_objects(&mut frame).unwrap();
+
+            let mut frame: Vec<B> = detections
+                .iter()
+                .map(|&&(x, _)| new_blob(Rect::new(x, 100.0, 100.0, 100.0), dt))
+                .collect();
+            let detection_ids: Vec<_> = frame.iter().map(Blob::get_id).collect();
+            tracker.match_objects(&mut frame).unwrap();
+
+            let assigned_ids: HashSet<_> = frame.iter().map(Blob::get_id).collect();
+            assert_eq!(assigned_ids.len(), frame.len());
+            let new_tracks = detections.iter().filter(|(_, index)| index.is_none()).count();
+            assert_eq!(tracker.objects.len(), track_ids.len() + new_tracks);
+            for (i, (_, track_index)) in detections.iter().enumerate() {
+                let expected_id = track_index.map_or(detection_ids[i], |index| track_ids[index]);
+                assert_eq!(frame[i].get_id(), expected_id, "detections: {detections:?}");
+                let track = &tracker.objects[&expected_id];
+                assert_eq!(track.get_no_match_times(), 0);
+                assert_eq!(track.get_lost_seconds(), 0.0);
+                assert_eq!(track.track_len(), if track_index.is_some() { 2 } else { 1 });
+            }
+            for (index, id) in track_ids.iter().enumerate() {
+                if !detections.iter().any(|(_, target)| *target == Some(index)) {
+                    let track = &tracker.objects[id];
+                    assert_eq!(track.get_no_match_times(), 1);
+                    assert_eq!(track.get_lost_seconds(), dt);
+                    assert_eq!(track.track_len(), 1);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_competing_detections_use_free_track() {
+        let detections = [(101.0, Some(0)), (110.0, Some(1))];
+        check_competing_detections(SimpleBlob::new_with_dt, &[100.0, 130.0], &detections);
+        check_competing_detections(BlobBBox::new_with_dt, &[100.0, 130.0], &detections);
+    }
+
+    #[test]
+    fn test_competing_detections_preserve_match_priority() {
+        // The detection at 118 wins the second track before the one at 110 retries the third.
+        let detections = [(101.0, Some(0)), (110.0, Some(2)), (118.0, Some(1))];
+        let tracks = [100.0, 130.0, 160.0];
+        check_competing_detections(SimpleBlob::new_with_dt, &tracks, &detections);
+        check_competing_detections(BlobBBox::new_with_dt, &tracks, &detections);
+    }
+
+    #[test]
+    fn test_competing_detections_register_when_no_suitable_track_remains() {
+        let detections = [(101.0, Some(0)), (110.0, None)];
+        for tracks in [&[100.0][..], &[100.0, 1000.0][..]] {
+            check_competing_detections(SimpleBlob::new_with_dt, tracks, &detections);
+            check_competing_detections(BlobBBox::new_with_dt, tracks, &detections);
+        }
+    }
 
     fn check_new_track_initialization<B: Blob>(blob: B) {
         let id = blob.get_id();

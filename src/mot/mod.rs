@@ -1,6 +1,7 @@
 //! Export contents of `mot` folder
 mod blob;
 mod bytetrack;
+mod greedy_matching;
 mod iou_tracker;
 mod mot_errors;
 mod simple;
