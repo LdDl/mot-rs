@@ -23,8 +23,10 @@ pub trait Blob: Clone {
     fn get_track(&self) -> &Vec<Point>;
     fn track_len(&self) -> usize;
     fn get_max_track_len(&self) -> usize;
+    /// Keeps the most recent points up to this limit and trims existing history immediately. Zero clears the history and disables recording without stopping the Kalman filter.
     fn set_max_track_len(&mut self, max_track_len: usize);
     /* Activation state */
+    /// For a stored track, true if it was registered or matched in the latest frame. A missed track is inactive but remains stored until its expiry limit is reached.
     fn exists(&self) -> bool;
     fn activate(&mut self);
     fn deactivate(&mut self);
@@ -53,4 +55,92 @@ pub trait Blob: Clone {
     fn distance_to(&self, other: &Self) -> f32;
     /// Distance from this blob's current center to the other blob's next predicted center, without advancing either filter.
     fn distance_to_predicted(&self, other: &Self) -> f32;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Blob;
+    use crate::mot::{BlobBBox, SimpleBlob};
+    use crate::utils::Rect;
+
+    fn history<B: Blob>(blob: &B) -> Vec<(f32, f32)> {
+        blob.get_track()
+            .iter()
+            .map(|point| (point.x, point.y))
+            .collect()
+    }
+
+    fn check_history_limit<B: Blob>(new_blob: fn(Rect, f32) -> B, set_limit: fn(&mut B, usize)) {
+        let make = |step| new_blob(Rect::new(100.0 + step as f32, 200.0, 20.0, 30.0), 0.04);
+        let mut blob = make(0);
+        for step in 1..10 {
+            blob.predict_next_position();
+            blob.update(&make(step)).unwrap();
+        }
+        let mut observed = history(&blob);
+        let prediction = blob.get_predicted_position_readonly();
+        let uncertainty = blob.get_position_uncertainty();
+        set_limit(&mut blob, 3);
+        assert_eq!(blob.get_max_track_len(), 3);
+        assert_eq!(history(&blob), observed[observed.len() - 3..]);
+        assert_eq!(blob.get_predicted_position_readonly(), prediction);
+        assert_eq!(blob.get_position_uncertainty(), uncertainty);
+
+        let capacity = blob.get_track().capacity();
+        let storage = blob.get_track().as_ptr();
+        for step in 10..20 {
+            blob.predict_next_position();
+            blob.update(&make(step)).unwrap();
+            let center = blob.get_center();
+            observed.push((center.x, center.y));
+            assert_eq!(history(&blob), observed[observed.len() - 3..]);
+            assert_eq!(blob.get_track().capacity(), capacity);
+            assert_eq!(blob.get_track().as_ptr(), storage);
+        }
+
+        set_limit(&mut blob, 0);
+        assert!(blob.get_track().is_empty());
+        let center_before = blob.get_center();
+        blob.predict_next_position();
+        blob.update(&make(30)).unwrap();
+        assert!(blob.get_track().is_empty());
+        assert_ne!(blob.get_center().x, center_before.x);
+
+        set_limit(&mut blob, 2);
+        assert!(blob.get_track().is_empty());
+        let mut recent = Vec::new();
+        for step in 31..34 {
+            blob.predict_next_position();
+            blob.update(&make(step)).unwrap();
+            let center = blob.get_center();
+            recent.push((center.x, center.y));
+        }
+        assert_eq!(history(&blob), recent[1..]);
+        set_limit(&mut blob, 5);
+        assert_eq!(history(&blob), recent[1..]);
+        blob.predict_next_position();
+        blob.update(&make(34)).unwrap();
+        assert_eq!(blob.track_len(), 3);
+        let center = blob.get_center();
+        set_limit(&mut blob, 1);
+        assert_eq!(history(&blob), vec![(center.x, center.y)]);
+    }
+
+    #[test]
+    fn test_history_limit_simple_blob() {
+        check_history_limit(SimpleBlob::new_with_dt, SimpleBlob::set_max_track_len);
+        check_history_limit(
+            SimpleBlob::new_with_dt,
+            <SimpleBlob as Blob>::set_max_track_len,
+        );
+    }
+
+    #[test]
+    fn test_history_limit_bbox() {
+        check_history_limit(BlobBBox::new_with_dt, BlobBBox::set_max_track_len);
+        check_history_limit(
+            BlobBBox::new_with_dt,
+            <BlobBBox as Blob>::set_max_track_len,
+        );
+    }
 }

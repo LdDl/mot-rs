@@ -1,4 +1,5 @@
 use crate::mot::blob::Blob;
+use crate::mot::greedy_matching::greedy_matching;
 use crate::mot::TrackerError;
 use crate::utils::{iou, Rect, Point, euclidean_distance};
 use pathfinding::{matrix::Matrix, prelude::kuhn_munkres_min};
@@ -160,7 +161,11 @@ impl<B: Blob> ByteTracker<B> {
             }
         }
 
-        // Get active tracks
+        for track in self.objects.values_mut() {
+            track.deactivate();
+        }
+
+        // Include unexpired missed tracks so they can be matched again.
         let active_track_ids: Vec<Uuid> = self
             .objects
             .iter()
@@ -274,8 +279,7 @@ impl<B: Blob> ByteTracker<B> {
 
         Ok(())
     }
-    /// Returns a vec of active tracks.
-    ///
+    /// Returns unexpired tracks, including temporarily missed tracks. Filter by [`Blob::exists`] to select tracks detected in the latest frame.
     pub fn get_active_tracks(&self) -> Vec<&B> {
         self.objects
             .iter()
@@ -392,29 +396,19 @@ impl<B: Blob> ByteTracker<B> {
         track_bboxes: &[(Uuid, Rect)],
         detection_indices: &[usize],
     ) -> Vec<(usize, usize)> {
-        let mut matches = Vec::new();
-        let mut matched_dets = HashSet::new();
-        for i in 0..track_bboxes.len() {
-            let mut best_iou = self.min_iou;
-            let mut best_det_idx = None;
-            for j in 0..detection_indices.len() {
-                // Skip already matched detections
-                if matched_dets.contains(&j) {
-                    continue;
+        let mut candidates = vec![Vec::new(); detection_indices.len()];
+        for track_index in 0..track_bboxes.len() {
+            for (detection_index, row) in candidates.iter_mut().enumerate() {
+                let score = iou_matrix[track_index][detection_index];
+                if score >= self.min_iou {
+                    row.push((track_index, -score));
                 }
-                let iou_val = iou_matrix[i][j];
-                if iou_val > best_iou {
-                    best_iou = iou_val;
-                    best_det_idx = Some(j);
-                }
-            }
-            // If found a match
-            if let Some(det_idx) = best_det_idx {
-                matches.push((i, det_idx));
-                matched_dets.insert(det_idx);
             }
         }
-        matches
+        greedy_matching(candidates, track_bboxes.len())
+            .into_iter()
+            .map(|(detection, track)| (track, detection))
+            .collect()
     }
     // Helper function to process matches
     fn process_matches(
@@ -438,6 +432,7 @@ impl<B: Blob> ByteTracker<B> {
                     // Correct order: predict first, then update
                     track.predict_next_position(); // Predict next position t+1
                     track.update(&detections_array[detection_idx])?; // Update with detection at t+1
+                    track.activate();
                     track.reset_no_match();
                     // Hand the track's identity back to the caller's detection, the
                     // way IoUTracker does. Callers read the id straight off the
@@ -463,19 +458,150 @@ mod tests {
     use crate::mot::{BlobBBox, MatchingAlgorithm, SimpleBlob};
     use crate::utils::Rect;
 
+    fn check_activity_follows_detections<B: Blob>(
+        new_blob: fn(Rect, f32) -> B,
+        algorithm: MatchingAlgorithm,
+    ) {
+        let mut tracker = super::ByteTracker::new(5, 0.3, 0.5, 0.3, algorithm);
+        let make = |x| new_blob(Rect::new(x, 100.0, 100.0, 100.0), 0.04);
+        let mut frame = vec![make(100.0), make(1000.0)];
+        let first_id = frame[0].get_id();
+        let second_id = frame[1].get_id();
+        tracker.match_objects(&mut frame, &[0.9, 0.9]).unwrap();
+        assert!(tracker.match_objects(&mut vec![], &[0.9]).is_err());
+        assert!(tracker.objects[&first_id].exists());
+        assert!(tracker.objects[&second_id].exists());
+
+        let mut frame = vec![make(101.0), make(2000.0)];
+        let new_id = frame[1].get_id();
+        tracker.match_objects(&mut frame, &[0.9, 0.9]).unwrap();
+        assert_eq!(frame[0].get_id(), first_id);
+        assert!(tracker.objects[&first_id].exists());
+        assert!(!tracker.objects[&second_id].exists());
+        assert!(tracker.objects[&new_id].exists());
+        assert_eq!(tracker.objects[&second_id].get_no_match_times(), 1);
+
+        tracker.match_objects(&mut vec![], &[]).unwrap();
+        assert_eq!(tracker.objects.len(), 3);
+        assert!(tracker.objects.values().all(|track| !track.exists()));
+        assert_eq!(tracker.get_active_tracks().len(), 3);
+        let mut frame = vec![make(1000.0)];
+        tracker.match_objects(&mut frame, &[0.4]).unwrap();
+        assert_eq!(frame[0].get_id(), second_id);
+        assert!(tracker.objects[&second_id].exists());
+        assert_eq!(tracker.objects[&second_id].get_no_match_times(), 0);
+        assert_eq!(tracker.objects[&second_id].get_lost_seconds(), 0.0);
+        assert!(!tracker.objects[&first_id].exists());
+        assert!(!tracker.objects[&new_id].exists());
+    }
+
+    #[test]
+    fn test_activity_follows_detections() {
+        for algorithm in [MatchingAlgorithm::Hungarian, MatchingAlgorithm::Greedy] {
+            check_activity_follows_detections(SimpleBlob::new_with_dt, algorithm);
+            check_activity_follows_detections(BlobBBox::new_with_dt, algorithm);
+        }
+    }
+
     fn hungarian_matches(scores: Vec<Vec<f32>>, min_iou: f32) -> Vec<(usize, usize)> {
+        matching_scores(scores, min_iou, MatchingAlgorithm::Hungarian)
+    }
+
+    fn matching_scores(
+        scores: Vec<Vec<f32>>,
+        min_iou: f32,
+        algorithm: MatchingAlgorithm,
+    ) -> Vec<(usize, usize)> {
         let tracker = super::ByteTracker::<SimpleBlob>::new(
             5,
             min_iou,
             0.5,
             0.3,
-            MatchingAlgorithm::Hungarian,
+            algorithm,
         );
         let tracks: Vec<_> = (0..scores.len())
             .map(|index| (uuid::Uuid::from_u128(index as u128), Rect::default()))
             .collect();
         let detections: Vec<_> = (0..scores.first().map_or(0, Vec::len)).collect();
         tracker.perform_matching(&scores, &tracks, &detections)
+    }
+
+    #[test]
+    fn test_greedy_prefers_best_pair_in_any_track_order() {
+        for (scores, expected) in [
+            (vec![vec![0.55], vec![0.95]], vec![(1, 0)]),
+            (vec![vec![0.95], vec![0.55]], vec![(0, 0)]),
+            (vec![vec![0.8, 0.7], vec![0.9, 0.1]], vec![(1, 0), (0, 1)]),
+        ] {
+            assert_eq!(
+                matching_scores(scores, 0.3, MatchingAlgorithm::Greedy),
+                expected
+            );
+        }
+    }
+
+    #[test]
+    fn test_greedy_threshold_and_empty_inputs() {
+        for threshold in [0.0, 0.5, 1.0] {
+            assert_eq!(
+                matching_scores(vec![vec![threshold]], threshold, MatchingAlgorithm::Greedy),
+                vec![(0, 0)]
+            );
+        }
+        for scores in [
+            vec![],
+            vec![vec![], vec![]],
+            vec![vec![0.49, 0.1], vec![0.0, 0.2]],
+        ] {
+            assert!(matching_scores(scores, 0.5, MatchingAlgorithm::Greedy).is_empty());
+        }
+    }
+
+    fn check_greedy_confidence_stages<B: Blob>(new_blob: fn(Rect, f32) -> B) {
+        for confidence in [0.9, 0.4] {
+            let mut tracker = super::ByteTracker::new(5, 0.3, 0.5, 0.3, MatchingAlgorithm::Greedy);
+            let mut frame = vec![
+                new_blob(Rect::new(100.0, 100.0, 100.0, 100.0), 0.04),
+                new_blob(Rect::new(130.0, 100.0, 100.0, 100.0), 0.04),
+            ];
+            tracker.match_objects(&mut frame, &[0.9, 0.9]).unwrap();
+            // Place the weaker candidate first in the actual map iteration order.
+            let ids: Vec<_> = tracker.objects.keys().copied().collect();
+            for (id, x) in [(ids[0], 130.0), (ids[1], 100.0)] {
+                let mut blob = new_blob(Rect::new(x, 100.0, 100.0, 100.0), 0.04);
+                blob.set_id(id);
+                *tracker.objects.get_mut(&id).unwrap() = blob;
+            }
+            let mut frame = vec![new_blob(Rect::new(101.0, 100.0, 100.0, 100.0), 0.04)];
+            tracker.match_objects(&mut frame, &[confidence]).unwrap();
+            assert_eq!(frame[0].get_id(), ids[1]);
+            assert_eq!(tracker.objects.len(), 2);
+            assert_eq!(tracker.objects[&ids[0]].get_no_match_times(), 1);
+            assert_eq!(tracker.objects[&ids[1]].get_no_match_times(), 0);
+            assert_eq!(tracker.objects[&ids[1]].track_len(), 2);
+        }
+
+        // A high-confidence match keeps priority over a closer low-confidence detection.
+        let mut tracker = super::ByteTracker::new(5, 0.3, 0.5, 0.3, MatchingAlgorithm::Greedy);
+        let mut frame = vec![new_blob(Rect::new(100.0, 100.0, 100.0, 100.0), 0.04)];
+        let id = frame[0].get_id();
+        tracker.match_objects(&mut frame, &[0.9]).unwrap();
+        let mut frame = vec![
+            new_blob(Rect::new(120.0, 100.0, 100.0, 100.0), 0.04),
+            new_blob(Rect::new(101.0, 100.0, 100.0, 100.0), 0.04),
+        ];
+        let low_id = frame[1].get_id();
+        tracker.match_objects(&mut frame, &[0.9, 0.4]).unwrap();
+        assert_eq!(frame[0].get_id(), id);
+        assert_eq!(frame[1].get_id(), low_id);
+        assert_eq!(tracker.objects.len(), 1);
+        assert_eq!(tracker.objects[&id].track_len(), 2);
+    }
+
+    #[test]
+    fn test_greedy_confidence_stages() {
+        check_greedy_confidence_stages(SimpleBlob::new_with_dt);
+        check_greedy_confidence_stages(BlobBBox::new_with_dt);
     }
 
     #[test]
