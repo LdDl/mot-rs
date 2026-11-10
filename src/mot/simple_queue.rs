@@ -33,6 +33,7 @@ impl<'a, B: Blob> Ord for DistanceBlob<'a, B> {
     }
 }
 
+#[cfg(test)]
 mod tests {
     use crate::mot::SimpleBlob;
     #[test]

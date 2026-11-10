@@ -68,6 +68,7 @@ pub fn iou(r1: &Rect, r2: &Rect) -> f32 {
     f32::max(0.0, f32::min(iou, 1.0))
 }
 
+#[cfg(test)]
 mod tests {
     #[test]
     fn test_euclidean_distance() {

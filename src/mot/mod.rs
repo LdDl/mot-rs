@@ -8,6 +8,7 @@ mod simple;
 mod simple_blob;
 mod blob_bbox;
 mod simple_queue;
+#[cfg(test)]
 mod test_data;
 
 pub use self::{

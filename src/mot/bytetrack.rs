@@ -19,7 +19,7 @@ pub enum MatchingAlgorithm {
 
 /// Straightforward implementation of Multi-object tracker (MOT) called ByteTrack.
 pub struct ByteTracker<B: Blob> {
-    /// Maximum number of frames an object can be missing before it is removed
+    /// Removes a track once it reaches this many missed frames. Zero removes it on the first miss.
     max_disappeared: usize,
     /// When set, tracks expire by unmatched time instead of by `max_disappeared` frames. Default is None
     max_lost_seconds: Option<f32>,
@@ -55,7 +55,7 @@ impl<B: Blob> ByteTracker<B> {
             objects: HashMap::new(),
         }
     }
-    /// Creates news instance of ByteTracker
+    /// Creates a ByteTracker with the specified matching and expiry settings. A zero `max_disappeared` keeps detected tracks and removes them on their first missed frame.
     ///
     /// Basic usage:
     ///
@@ -101,7 +101,7 @@ impl<B: Blob> ByteTracker<B> {
             self.max_lost_seconds = Some(seconds);
         }
     }
-    /// Switches track expiry back to a frame count (a track is removed once it reaches `max_disappeared` missed frames)
+    /// Switches track expiry back to a frame count. A positive limit removes a track once it reaches `max_disappeared` missed frames; zero removes it on the first missed frame.
     pub fn set_max_disappeared(&mut self, max_disappeared: usize) {
         self.max_disappeared = max_disappeared;
         self.max_lost_seconds = None;
@@ -128,7 +128,7 @@ impl<B: Blob> ByteTracker<B> {
     fn is_alive(&self, track: &B) -> bool {
         match self.max_lost_seconds {
             Some(seconds) => track.get_lost_seconds() <= seconds,
-            None => track.get_no_match_times() < self.max_disappeared,
+            None => track.get_no_match_times() < self.max_disappeared.max(1),
         }
     }
 
@@ -270,7 +270,7 @@ impl<B: Blob> ByteTracker<B> {
         }
 
         // 5. Remove tracks that have disappeared for too long
-        let max_disappeared = self.max_disappeared;
+        let max_disappeared = self.max_disappeared.max(1);
         let max_lost_seconds = self.max_lost_seconds;
         self.objects.retain(|_, track| match max_lost_seconds {
             Some(seconds) => track.get_lost_seconds() <= seconds,
@@ -770,6 +770,69 @@ mod tests {
         let bbox = Rect::new(10.0, 20.0, 30.0, 40.0);
         check_new_track_with_frame_limit(SimpleBlob::new_with_dt(bbox.clone(), 0.04));
         check_new_track_with_frame_limit(BlobBBox::new_with_dt(bbox, 0.04));
+    }
+
+    fn check_small_frame_limits<B: Blob>(new_blob: fn(Rect, f32) -> B) {
+        let make = || new_blob(Rect::new(100.0, 100.0, 20.0, 20.0), 0.125);
+        for algorithm in [MatchingAlgorithm::Hungarian, MatchingAlgorithm::Greedy] {
+            for (limit, expires_after) in [(0, 1), (1, 1), (2, 2)] {
+                for use_setter in [false, true] {
+                    let initial_limit = if use_setter { 5 } else { limit };
+                    let mut tracker = super::ByteTracker::new(initial_limit, 0.3, 0.5, 0.3, algorithm);
+                    let mut frame = vec![make()];
+                    let id = frame[0].get_id();
+                    tracker.match_objects(&mut frame, &[0.9]).unwrap();
+                    if use_setter {
+                        tracker.set_max_lost_seconds(10.0);
+                        tracker.set_max_disappeared(limit);
+                    }
+                    assert_eq!(tracker.get_max_disappeared(), limit);
+                    assert_eq!(tracker.get_max_lost_seconds(), None);
+                    assert!(tracker.objects.contains_key(&id));
+                    assert_eq!(tracker.get_active_tracks().len(), 1);
+
+                    for confidence in [0.9, 0.4] {
+                        let mut frame = vec![make()];
+                        tracker.match_objects(&mut frame, &[confidence]).unwrap();
+                        assert_eq!(frame[0].get_id(), id);
+                        assert_eq!(tracker.objects.len(), 1);
+                        assert!(tracker.objects[&id].exists());
+                        assert_eq!(tracker.objects[&id].get_no_match_times(), 0);
+                        assert_eq!(tracker.get_active_tracks().len(), 1);
+                    }
+                    for missed in 1..=expires_after {
+                        tracker.match_objects(&mut vec![], &[]).unwrap();
+                        if missed < expires_after {
+                            assert_eq!(tracker.objects[&id].get_no_match_times(), missed);
+                            assert!(!tracker.objects[&id].exists());
+                            assert_eq!(tracker.get_active_tracks().len(), 1);
+                        } else {
+                            assert!(tracker.objects.is_empty());
+                            assert!(tracker.get_active_tracks().is_empty());
+                        }
+                    }
+                }
+            }
+
+            let mut tracker = super::ByteTracker::new(0, 0.3, 0.5, 0.3, algorithm);
+            tracker.set_max_lost_seconds(0.25);
+            let mut frame = vec![make()];
+            let id = frame[0].get_id();
+            tracker.match_objects(&mut frame, &[0.9]).unwrap();
+            for missed in 1..=2 {
+                tracker.match_objects(&mut vec![], &[]).unwrap();
+                assert_eq!(tracker.objects[&id].get_lost_seconds(), missed as f32 * 0.125);
+                assert_eq!(tracker.get_active_tracks().len(), 1);
+            }
+            tracker.match_objects(&mut vec![], &[]).unwrap();
+            assert!(tracker.objects.is_empty());
+        }
+    }
+
+    #[test]
+    fn test_small_frame_limits() {
+        check_small_frame_limits(SimpleBlob::new_with_dt);
+        check_small_frame_limits(BlobBBox::new_with_dt);
     }
 
     fn check_new_track_with_time_limit<B: Blob>(blob: B) {

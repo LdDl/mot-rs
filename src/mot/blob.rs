@@ -7,7 +7,7 @@ use crate::utils::{Point, Rect};
 ///
 /// Implementations:
 /// - `SimpleBlob` - uses 4D Kalman (center position only)
-/// - `BlobBBox` - uses 8D Kalman (full bbox with size dynamics). FUTURE WORKS!!!
+/// - `BlobBBox` - uses 8D Kalman (full bbox with size dynamics).
 pub trait Blob: Clone {
     /* Identity */
     fn get_id(&self) -> Uuid;
