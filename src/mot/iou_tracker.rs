@@ -16,14 +16,14 @@ pub struct IoUTracker<B: Blob> {
     max_no_match: usize,
     // When set, tracks expire by unmatched time instead of by `max_no_match` frames. Default is None
     max_lost_seconds: Option<f32>,
-    // IoU threshold for matching. Default is 0.3
+    // Strict lower bound on the hybrid matching score. Default is 0.3
     iou_threshold: f32,
     // Storage
     pub objects: HashMap<Uuid, B>,
 }
 
 impl<B: Blob> IoUTracker<B> {
-    /// Creates default instance of IoUTracker
+    /// Creates an IoUTracker with a hybrid matching threshold of 0.3 and a limit of 75 missed frames.
     ///
     /// Basic usage:
     ///
@@ -35,11 +35,13 @@ impl<B: Blob> IoUTracker<B> {
         IoUTracker {
             max_no_match: 75,
             max_lost_seconds: None,
-            iou_threshold: 0.0,
+            iou_threshold: 0.3,
             objects: HashMap::new(),
         }
     }
-    /// Creates news instance of IoUTracker
+    /// Creates an IoUTracker with the specified missed-frame limit and hybrid matching threshold.
+    ///
+    /// Matching uses predicted boxes and center distance. For IoU above 0.05, the score is `0.8 * IoU + 0.2 * distance_score`; otherwise it is `0.5 * distance_score`, where `distance_score = 1 / (1 + distance * 0.01)`. A match requires a score strictly greater than `_iou_threshold`. Setting it to zero permits distant matches with a positive score.
     ///
     /// Basic usage:
     ///
@@ -168,6 +170,7 @@ impl<B: Blob> IoUTracker<B> {
             let detection = &mut new_objects[detection_index];
             track.predict_next_position();
             track.update(detection)?;
+            track.activate();
             track.reset_no_match();
             detection.set_id(id);
             reserved_objects.insert(id);
@@ -177,7 +180,9 @@ impl<B: Blob> IoUTracker<B> {
         let mut blobs_to_register = HashMap::new();
         for (index, detection) in new_objects.iter().enumerate() {
             if !matched_detections[index] {
-                blobs_to_register.insert(detection.get_id(), detection.clone());
+                let mut track = detection.clone();
+                track.activate();
+                blobs_to_register.insert(track.get_id(), track);
             }
         }
 
@@ -225,6 +230,92 @@ mod tests {
     use crate::mot::test_data::{bbox_to_rect, get_naive_data, get_spread_data};
     use crate::mot::{BlobBBox, SimpleBlob};
     use crate::utils::Rect;
+
+    fn check_activity_follows_detections<B: Blob>(new_blob: fn(Rect, f32) -> B) {
+        let mut tracker = super::IoUTracker::default();
+        let make = |x| new_blob(Rect::new(x, 100.0, 100.0, 100.0), 0.04);
+        let mut frame = vec![make(100.0), make(1000.0)];
+        let first_id = frame[0].get_id();
+        let second_id = frame[1].get_id();
+        tracker.match_objects(&mut frame).unwrap();
+        assert!(tracker.objects[&first_id].exists());
+        assert!(tracker.objects[&second_id].exists());
+
+        let mut frame = vec![make(101.0), make(2000.0)];
+        let new_id = frame[1].get_id();
+        tracker.match_objects(&mut frame).unwrap();
+        assert_eq!(frame[0].get_id(), first_id);
+        assert!(tracker.objects[&first_id].exists());
+        assert!(!tracker.objects[&second_id].exists());
+        assert!(tracker.objects[&new_id].exists());
+        assert_eq!(tracker.objects[&second_id].get_no_match_times(), 1);
+
+        tracker.match_objects(&mut vec![]).unwrap();
+        assert_eq!(tracker.objects.len(), 3);
+        assert!(tracker.objects.values().all(|track| !track.exists()));
+
+        let mut frame = vec![make(1000.0)];
+        tracker.match_objects(&mut frame).unwrap();
+        assert_eq!(frame[0].get_id(), second_id);
+        assert!(tracker.objects[&second_id].exists());
+        assert_eq!(tracker.objects[&second_id].get_no_match_times(), 0);
+        assert_eq!(tracker.objects[&second_id].get_lost_seconds(), 0.0);
+        assert!(!tracker.objects[&first_id].exists());
+        assert!(!tracker.objects[&new_id].exists());
+    }
+
+    #[test]
+    fn test_activity_follows_detections() {
+        check_activity_follows_detections(SimpleBlob::new_with_dt);
+        check_activity_follows_detections(BlobBBox::new_with_dt);
+    }
+
+    fn check_default_matching_threshold<B: Blob>(new_blob: fn(Rect, f32) -> B) {
+        for (mut tracker, accepts_distant) in [
+            (super::IoUTracker::default(), false),
+            (super::IoUTracker::new(75, 0.3), false),
+            (super::IoUTracker::new(75, 0.0), true),
+        ] {
+            let mut frame = vec![new_blob(Rect::new(100.0, 100.0, 100.0, 100.0), 0.04)];
+            let id = frame[0].get_id();
+            tracker.match_objects(&mut frame).unwrap();
+            let mut frame = vec![new_blob(Rect::new(101.0, 100.0, 100.0, 100.0), 0.04)];
+            tracker.match_objects(&mut frame).unwrap();
+            assert_eq!(frame[0].get_id(), id);
+
+            let mut frame = vec![new_blob(Rect::new(10000.0, 100.0, 100.0, 100.0), 0.04)];
+            let new_id = frame[0].get_id();
+            tracker.match_objects(&mut frame).unwrap();
+            assert_eq!(frame[0].get_id(), if accepts_distant { id } else { new_id });
+            assert_eq!(tracker.objects.len(), if accepts_distant { 1 } else { 2 });
+            assert_eq!(
+                tracker.objects[&id].get_no_match_times(),
+                if accepts_distant { 0 } else { 1 }
+            );
+        }
+
+        // The hybrid score allows nearby detections with zero overlap.
+        let mut tracker = super::IoUTracker::default();
+        let mut frame = vec![new_blob(Rect::new(100.0, 100.0, 2.0, 2.0), 0.04)];
+        let id = frame[0].get_id();
+        tracker.match_objects(&mut frame).unwrap();
+        let mut frame = vec![new_blob(Rect::new(110.0, 100.0, 2.0, 2.0), 0.04)];
+        assert_eq!(
+            crate::utils::iou(
+                &tracker.objects[&id].get_predicted_bbox_readonly(),
+                &frame[0].get_bbox()
+            ),
+            0.0
+        );
+        tracker.match_objects(&mut frame).unwrap();
+        assert_eq!(frame[0].get_id(), id);
+    }
+
+    #[test]
+    fn test_default_matching_threshold() {
+        check_default_matching_threshold(SimpleBlob::new_with_dt);
+        check_default_matching_threshold(BlobBBox::new_with_dt);
+    }
 
     fn check_competing_detections<B: Blob>(
         new_blob: fn(Rect, f32) -> B,

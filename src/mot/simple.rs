@@ -138,6 +138,7 @@ impl<B: Blob> SimpleTracker<B> {
             let detection = &mut new_objects[detection_index];
             track.predict_next_position();
             track.update(detection)?;
+            track.activate();
             track.reset_no_match();
             detection.set_id(id);
             reserved_objects.insert(id);
@@ -147,7 +148,9 @@ impl<B: Blob> SimpleTracker<B> {
         let mut blobs_to_register = HashMap::new();
         for (index, detection) in new_objects.iter().enumerate() {
             if !matched_detections[index] {
-                blobs_to_register.insert(detection.get_id(), detection.clone());
+                let mut track = detection.clone();
+                track.activate();
+                blobs_to_register.insert(track.get_id(), track);
             }
         }
 
@@ -193,6 +196,45 @@ mod tests {
     use crate::mot::test_data::{bbox_to_rect, get_naive_data, get_spread_data};
     use crate::mot::{BlobBBox, SimpleBlob};
     use crate::utils::{euclidean_distance, Point, Rect};
+
+    fn check_activity_follows_detections<B: Blob>(new_blob: fn(Rect, f32) -> B) {
+        let mut tracker = super::SimpleTracker::new(5, 30.0);
+        let make = |x| new_blob(Rect::new(x, 100.0, 100.0, 100.0), 0.04);
+        let mut frame = vec![make(100.0), make(1000.0)];
+        let first_id = frame[0].get_id();
+        let second_id = frame[1].get_id();
+        tracker.match_objects(&mut frame).unwrap();
+        assert!(tracker.objects[&first_id].exists());
+        assert!(tracker.objects[&second_id].exists());
+
+        let mut frame = vec![make(101.0), make(2000.0)];
+        let new_id = frame[1].get_id();
+        tracker.match_objects(&mut frame).unwrap();
+        assert_eq!(frame[0].get_id(), first_id);
+        assert!(tracker.objects[&first_id].exists());
+        assert!(!tracker.objects[&second_id].exists());
+        assert!(tracker.objects[&new_id].exists());
+        assert_eq!(tracker.objects[&second_id].get_no_match_times(), 1);
+
+        tracker.match_objects(&mut vec![]).unwrap();
+        assert_eq!(tracker.objects.len(), 3);
+        assert!(tracker.objects.values().all(|track| !track.exists()));
+
+        let mut frame = vec![make(1000.0)];
+        tracker.match_objects(&mut frame).unwrap();
+        assert_eq!(frame[0].get_id(), second_id);
+        assert!(tracker.objects[&second_id].exists());
+        assert_eq!(tracker.objects[&second_id].get_no_match_times(), 0);
+        assert_eq!(tracker.objects[&second_id].get_lost_seconds(), 0.0);
+        assert!(!tracker.objects[&first_id].exists());
+        assert!(!tracker.objects[&new_id].exists());
+    }
+
+    #[test]
+    fn test_activity_follows_detections() {
+        check_activity_follows_detections(SimpleBlob::new_with_dt);
+        check_activity_follows_detections(BlobBBox::new_with_dt);
+    }
 
     fn check_competing_detections<B: Blob>(
         new_blob: fn(Rect, f32) -> B,

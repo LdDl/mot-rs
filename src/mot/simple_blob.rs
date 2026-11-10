@@ -142,8 +142,12 @@ impl SimpleBlob {
     pub fn get_max_track_len(&self) -> usize {
         self.max_track_len
     }
+    /// Keeps at most this many recent points, trimming existing history immediately. Zero disables history recording.
     pub fn set_max_track_len(&mut self, max_track_len: usize) {
-        self.max_track_len = max_track_len
+        self.max_track_len = max_track_len;
+        if self.track.len() > max_track_len {
+            self.track.drain(..self.track.len() - max_track_len);
+        }
     }
     pub fn get_no_match_times(&self) -> usize {
         self.no_match_times
@@ -261,9 +265,11 @@ impl SimpleBlob {
         self.lost_seconds = 0.0;
 
         // Update track
-        self.track.push(self.current_center.clone());
-        if self.track.len() > self.max_track_len {
-            self.track = self.track[1..].to_vec();
+        if self.max_track_len > 0 {
+            if self.track.len() == self.max_track_len {
+                self.track.remove(0);
+            }
+            self.track.push(self.current_center.clone());
         }
 
         Ok(())
@@ -290,7 +296,7 @@ impl Blob for SimpleBlob {
     fn get_track(&self) -> &Vec<Point> { &self.track }
     fn track_len(&self) -> usize { self.track.len() }
     fn get_max_track_len(&self) -> usize { self.max_track_len }
-    fn set_max_track_len(&mut self, max_track_len: usize) { self.max_track_len = max_track_len }
+    fn set_max_track_len(&mut self, max_track_len: usize) { SimpleBlob::set_max_track_len(self, max_track_len) }
     fn exists(&self) -> bool { self.active }
     fn activate(&mut self) { self.active = true }
     fn deactivate(&mut self) { self.active = false }
