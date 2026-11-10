@@ -245,21 +245,22 @@ impl<B: Blob> ByteTracker<B> {
             )?;
         }
 
-        // 3. Add new tracks for unmatched high confidence detections
-        for &idx in &high_detection_indices {
-            if !matched_detections.contains(&idx) {
-                let mut new_blob = detections[idx].clone();
-                new_blob.activate();
-                self.objects.insert(new_blob.get_id(), new_blob);
-            }
-        }
-
-        // 4. Increment no_match_times for unmatched tracks
+        // 3. Increment no_match_times for unmatched tracks
         for (_, track) in self.objects.iter_mut() {
             if !matched_tracks.contains(&track.get_id()) {
                 // Progress to t+1 even if no match
                 track.predict_next_position();
                 track.inc_no_match();
+            }
+        }
+
+        // 4. Register new tracks after handling misses so their detection frame
+        // neither counts as missed nor advances their Kalman state.
+        for &idx in &high_detection_indices {
+            if !matched_detections.contains(&idx) {
+                let mut new_blob = detections[idx].clone();
+                new_blob.activate();
+                self.objects.insert(new_blob.get_id(), new_blob);
             }
         }
 
@@ -447,10 +448,94 @@ impl<B: Blob> ByteTracker<B> {
     }
 }
 
+#[cfg(test)]
 mod tests {
     use crate::mot::blob::Blob;
     use crate::mot::test_data::{bbox_to_rect, get_naive_data, get_spread_data};
     use crate::mot::{BlobBBox, MatchingAlgorithm, SimpleBlob};
+    use crate::utils::Rect;
+
+    fn check_new_track_initialization<B: Blob>(blob: B) {
+        let id = blob.get_id();
+        let dt = blob.get_dt();
+        let mut tracker = super::ByteTracker::default();
+        tracker
+            .match_objects(&mut vec![blob.clone()], &[0.9])
+            .unwrap();
+
+        let track = tracker.objects.get(&id).unwrap();
+        assert_eq!(track.get_no_match_times(), 0);
+        assert_eq!(track.get_lost_seconds(), 0.0);
+        assert_eq!(
+            track.get_predicted_position_readonly(),
+            blob.get_predicted_position_readonly()
+        );
+        assert_eq!(
+            track.get_position_uncertainty(),
+            blob.get_position_uncertainty()
+        );
+
+        tracker.match_objects(&mut vec![], &[]).unwrap();
+
+        let track = tracker.objects.get(&id).unwrap();
+        assert_eq!(track.get_no_match_times(), 1);
+        assert_eq!(track.get_lost_seconds(), dt);
+        let mut expected = blob;
+        expected.predict_next_position();
+        assert_eq!(
+            track.get_predicted_position_readonly(),
+            expected.get_predicted_position_readonly()
+        );
+        assert_eq!(
+            track.get_position_uncertainty(),
+            expected.get_position_uncertainty()
+        );
+    }
+
+    #[test]
+    fn test_new_track_initialization() {
+        let bbox = Rect::new(10.0, 20.0, 30.0, 40.0);
+        check_new_track_initialization(SimpleBlob::new_with_dt(bbox.clone(), 0.04));
+        check_new_track_initialization(BlobBBox::new_with_dt(bbox, 0.04));
+    }
+
+    fn check_new_track_with_frame_limit<B: Blob>(blob: B) {
+        let id = blob.get_id();
+        let mut tracker = super::ByteTracker::default();
+        tracker.set_max_disappeared(1);
+
+        tracker.match_objects(&mut vec![blob], &[0.9]).unwrap();
+        assert!(tracker.objects.contains_key(&id));
+
+        tracker.match_objects(&mut vec![], &[]).unwrap();
+        assert!(tracker.objects.is_empty());
+    }
+
+    #[test]
+    fn test_new_track_survives_frame_limit() {
+        let bbox = Rect::new(10.0, 20.0, 30.0, 40.0);
+        check_new_track_with_frame_limit(SimpleBlob::new_with_dt(bbox.clone(), 0.04));
+        check_new_track_with_frame_limit(BlobBBox::new_with_dt(bbox, 0.04));
+    }
+
+    fn check_new_track_with_time_limit<B: Blob>(blob: B) {
+        let id = blob.get_id();
+        let mut tracker = super::ByteTracker::default();
+        tracker.set_max_lost_seconds(blob.get_dt() / 2.0);
+
+        tracker.match_objects(&mut vec![blob], &[0.9]).unwrap();
+        assert!(tracker.objects.contains_key(&id));
+
+        tracker.match_objects(&mut vec![], &[]).unwrap();
+        assert!(tracker.objects.is_empty());
+    }
+
+    #[test]
+    fn test_new_track_survives_time_limit() {
+        let bbox = Rect::new(10.0, 20.0, 30.0, 40.0);
+        check_new_track_with_time_limit(SimpleBlob::new_with_dt(bbox.clone(), 0.04));
+        check_new_track_with_time_limit(BlobBBox::new_with_dt(bbox, 0.04));
+    }
 
     #[test]
     fn test_match_objects_spread() {
