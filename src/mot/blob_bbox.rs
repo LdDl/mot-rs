@@ -337,12 +337,10 @@ impl BlobBBox {
     pub fn distance_to(&self, b: &BlobBBox) -> f32 {
         euclidean_distance(&self.current_center, &b.current_center)
     }
+    /// Distance from this blob's current center to the other blob's next prediction without advancing either filter.
     pub fn distance_to_predicted(&self, b: &BlobBBox) -> f32 {
-        let (pred_x1, pred_y1) = self.get_predicted_position_readonly();
-        let (pred_x2, pred_y2) = b.get_predicted_position_readonly();
-        let p1 = Point::new(pred_x1, pred_y1);
-        let p2 = Point::new(pred_x2, pred_y2);
-        euclidean_distance(&p1, &p2)
+        let (pred_x, pred_y) = b.get_predicted_position_readonly();
+        euclidean_distance(&self.current_center, &Point::new(pred_x, pred_y))
     }
 }
 

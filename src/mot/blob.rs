@@ -51,5 +51,6 @@ pub trait Blob: Clone {
     fn update(&mut self, measurement: &Self) -> Result<(), TrackerError>;
     /* Distance metrics */
     fn distance_to(&self, other: &Self) -> f32;
+    /// Distance from this blob's current center to the other blob's next predicted center, without advancing either filter.
     fn distance_to_predicted(&self, other: &Self) -> f32;
 }

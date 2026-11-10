@@ -341,19 +341,26 @@ impl<B: Blob> ByteTracker<B> {
             MatchingAlgorithm::Hungarian => {
                 let num_tracks = track_bboxes.len();
                 let num_detections = detection_indices.len();
-                // Ensure we have at least as many columns as rows for Hungarian
-                let padded_cols = num_tracks.max(num_detections);
-                // Create padded cost matrix
-                let cost_data: Vec<i32> = (0..num_tracks)
+                if num_tracks == 0 || num_detections == 0 {
+                    return Vec::new();
+                }
+
+                // Each track can remain unmatched, even when there are enough detections.
+                let padded_cols = num_detections + num_tracks;
+                // Scores are in [0, 1]. Prefer even a valid zero-score pair to a dummy.
+                let unmatched_cost = SCALE_FACTOR as i64 + 1;
+                let forbidden_cost = unmatched_cost + 1;
+                let cost_data: Vec<i64> = (0..num_tracks)
                     .flat_map(|i| {
                         (0..padded_cols)
                             .map(|j| {
-                                if j < num_detections {
-                                    // Real IoU value
-                                    ((1.0 - iou_matrix[i][j]) * SCALE_FACTOR) as i32
+                                if j >= num_detections {
+                                    unmatched_cost
+                                } else if iou_matrix[i][j] >= self.min_iou {
+                                    ((1.0 - iou_matrix[i][j]) * SCALE_FACTOR) as i64
                                 } else {
-                                    // Dummy detection - very high cost (low IoU)
-                                    (SCALE_FACTOR) as i32 // Cost of 1.0 (IoU of 0.0)
+                                    // Reject this pair before optimization so it cannot displace a valid match.
+                                    forbidden_cost
                                 }
                             })
                             .collect::<Vec<_>>()
@@ -364,12 +371,13 @@ impl<B: Blob> ByteTracker<B> {
                     Err(_) => return Vec::new(), // Return empty matches on error
                 };
                 let (_, assignments) = kuhn_munkres_min(&cost_matrix);
-                // Filter out dummy assignments
                 assignments
-                    .iter()
+                    .into_iter()
                     .enumerate()
-                    .filter(|&(_, det_idx)| *det_idx < num_detections)
-                    .map(|(track_idx, &det_idx)| (track_idx, det_idx))
+                    .filter(|&(track_idx, det_idx)| {
+                        det_idx < num_detections
+                            && iou_matrix[track_idx][det_idx] >= self.min_iou
+                    })
                     .collect()
             }
             MatchingAlgorithm::Greedy => {
@@ -454,6 +462,126 @@ mod tests {
     use crate::mot::test_data::{bbox_to_rect, get_naive_data, get_spread_data};
     use crate::mot::{BlobBBox, MatchingAlgorithm, SimpleBlob};
     use crate::utils::Rect;
+
+    fn hungarian_matches(scores: Vec<Vec<f32>>, min_iou: f32) -> Vec<(usize, usize)> {
+        let tracker = super::ByteTracker::<SimpleBlob>::new(
+            5,
+            min_iou,
+            0.5,
+            0.3,
+            MatchingAlgorithm::Hungarian,
+        );
+        let tracks: Vec<_> = (0..scores.len())
+            .map(|index| (uuid::Uuid::from_u128(index as u128), Rect::default()))
+            .collect();
+        let detections: Vec<_> = (0..scores.first().map_or(0, Vec::len)).collect();
+        tracker.perform_matching(&scores, &tracks, &detections)
+    }
+
+    #[test]
+    fn test_hungarian_gates_before_assignment() {
+        for scores in [
+            vec![vec![0.51, 0.49], vec![0.49, 0.0]],
+            vec![vec![0.51, 0.49, 0.1], vec![0.49, 0.0, 0.1]],
+            vec![vec![0.51, 0.49], vec![0.49, 0.0], vec![0.1, 0.1]],
+        ] {
+            assert_eq!(hungarian_matches(scores, 0.5), vec![(0, 0)]);
+        }
+    }
+
+    #[test]
+    fn test_hungarian_leaves_tracks_unmatched() {
+        for (tracks, detections) in [(2, 2), (2, 3), (3, 2)] {
+            assert!(hungarian_matches(vec![vec![0.49; detections]; tracks], 0.5).is_empty());
+        }
+        assert_eq!(
+            hungarian_matches(vec![vec![0.8, 0.1], vec![0.9, 0.1]], 0.5),
+            vec![(1, 0)]
+        );
+    }
+
+    #[test]
+    fn test_hungarian_accepts_threshold_boundary() {
+        for min_iou in [0.0, 0.5, 1.0] {
+            assert_eq!(hungarian_matches(vec![vec![min_iou]], min_iou), vec![(0, 0)]);
+        }
+    }
+
+    #[test]
+    fn test_hungarian_preserves_global_best_assignment() {
+        assert_eq!(
+            hungarian_matches(vec![vec![0.9, 0.8], vec![0.85, 0.6]], 0.5),
+            vec![(0, 1), (1, 0)]
+        );
+    }
+
+    #[test]
+    fn test_hungarian_empty_inputs() {
+        assert!(hungarian_matches(vec![], 0.5).is_empty());
+        assert!(hungarian_matches(vec![vec![], vec![]], 0.5).is_empty());
+    }
+
+    fn check_hungarian_preserves_valid_track<B: Blob>(
+        new_blob: fn(Rect, f32) -> B,
+        confidence: f32,
+    ) {
+        let dt = 0.04;
+        let mut tracker = super::ByteTracker::new(5, 0.5, 0.5, 0.3, MatchingAlgorithm::Hungarian);
+        let mut frame = vec![
+            new_blob(Rect::new(100.0, 100.0, 100.0, 100.0), dt),
+            new_blob(Rect::new(166.0, 100.0, 100.0, 100.0), dt),
+        ];
+        let matched_id = frame[0].get_id();
+        let missed_id = frame[1].get_id();
+        tracker.match_objects(&mut frame, &[0.9, 0.9]).unwrap();
+
+        let mut frame = vec![
+            new_blob(Rect::new(132.0, 100.0, 100.0, 100.0), dt),
+            new_blob(Rect::new(66.0, 100.0, 100.0, 100.0), dt),
+        ];
+        let unmatched_detection_id = frame[1].get_id();
+        tracker
+            .match_objects(&mut frame, &[confidence, confidence])
+            .unwrap();
+
+        assert_eq!(frame[0].get_id(), matched_id);
+        assert_eq!(frame[1].get_id(), unmatched_detection_id);
+        let matched = &tracker.objects[&matched_id];
+        assert_eq!(matched.get_no_match_times(), 0);
+        assert_eq!(matched.get_lost_seconds(), 0.0);
+        assert_eq!(matched.track_len(), 2);
+        let missed = &tracker.objects[&missed_id];
+        assert_eq!(missed.get_no_match_times(), 1);
+        assert_eq!(missed.get_lost_seconds(), dt);
+
+        if confidence >= 0.5 {
+            assert_eq!(tracker.objects.len(), 3);
+            assert_eq!(tracker.objects[&unmatched_detection_id].get_no_match_times(), 0);
+        } else {
+            assert_eq!(tracker.objects.len(), 2);
+            assert!(!tracker.objects.contains_key(&unmatched_detection_id));
+        }
+    }
+
+    #[test]
+    fn test_hungarian_preserves_high_confidence_match_simple_blob() {
+        check_hungarian_preserves_valid_track(SimpleBlob::new_with_dt, 0.9);
+    }
+
+    #[test]
+    fn test_hungarian_preserves_high_confidence_match_bbox() {
+        check_hungarian_preserves_valid_track(BlobBBox::new_with_dt, 0.9);
+    }
+
+    #[test]
+    fn test_hungarian_preserves_low_confidence_match_simple_blob() {
+        check_hungarian_preserves_valid_track(SimpleBlob::new_with_dt, 0.4);
+    }
+
+    #[test]
+    fn test_hungarian_preserves_low_confidence_match_bbox() {
+        check_hungarian_preserves_valid_track(BlobBBox::new_with_dt, 0.4);
+    }
 
     fn check_new_track_initialization<B: Blob>(blob: B) {
         let id = blob.get_id();

@@ -271,8 +271,10 @@ impl SimpleBlob {
     pub fn distance_to(&self, b: &SimpleBlob) -> f32 {
         euclidean_distance(&self.current_center, &b.current_center)
     }
+    /// Distance from this blob's current center to the other blob's next prediction without advancing either filter.
     pub fn distance_to_predicted(&self, b: &SimpleBlob) -> f32 {
-        euclidean_distance(&self.predicted_next_position, &b.predicted_next_position)
+        let (pred_x, pred_y) = b.get_predicted_position_readonly();
+        euclidean_distance(&self.current_center, &Point::new(pred_x, pred_y))
     }
 }
 

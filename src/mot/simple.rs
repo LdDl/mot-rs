@@ -90,10 +90,13 @@ impl<B: Blob> SimpleTracker<B> {
         &mut self,
         new_objects: &mut Vec<B>,
     ) -> Result<(), mot_errors::TrackerError> {
+        // Use the current frame interval for both prediction and lost time.
+        if let Some(first) = new_objects.first() {
+            self.set_dt(first.get_dt());
+        }
+
         for (_, object) in self.objects.iter_mut() {
-            object.deactivate(); // Make sure that object is marked as deactivated
-                                 // object.predict_next_position_naive(5);
-            object.predict_next_position();
+            object.deactivate();
         }
         let mut blobs_to_register: HashMap<Uuid, B> = HashMap::new();
 
@@ -105,6 +108,7 @@ impl<B: Blob> SimpleTracker<B> {
             let mut min_distance = f32::MAX;
             for (j, object) in self.objects.iter() {
                 let dist = new_object.distance_to(object);
+                // Compare the detection to the current frame's prediction before advancing the filter.
                 let dist_predicted = new_object.distance_to_predicted(object);
                 let dist_verified = f32::min(dist, dist_predicted);
                 if dist_verified < min_distance {
@@ -141,6 +145,7 @@ impl<B: Blob> SimpleTracker<B> {
             {
                 match self.objects.get_mut(&min_id) {
                     Some(v) => {
+                        v.predict_next_position();
                         v.update(&distance_blob.blob)?;
                         v.reset_no_match();
                         // Last but not least:
@@ -161,6 +166,7 @@ impl<B: Blob> SimpleTracker<B> {
         // Count misses only for existing tracks without a detection this frame.
         for (id, object) in self.objects.iter_mut() {
             if !reserved_objects.contains(id) {
+                object.predict_next_position();
                 object.inc_no_match();
             }
         }
@@ -198,7 +204,220 @@ mod tests {
     use crate::mot::blob::Blob;
     use crate::mot::test_data::{bbox_to_rect, get_naive_data, get_spread_data};
     use crate::mot::{BlobBBox, SimpleBlob};
-    use crate::utils::Rect;
+    use crate::utils::{euclidean_distance, Point, Rect};
+
+    fn check_prediction_distance_uses_detection_center<B: Blob>(new_blob: fn(Rect, f32) -> B) {
+        let track = new_blob(Rect::new(10.0, 20.0, 10.0, 10.0), 1.0);
+        let detection = new_blob(Rect::new(100.0, 20.0, 10.0, 10.0), 1.0);
+        let prediction = track.get_predicted_position_readonly();
+        let detection_prediction = detection.get_predicted_position_readonly();
+        let track_uncertainty = track.get_position_uncertainty();
+        let detection_uncertainty = detection.get_position_uncertainty();
+        let expected = euclidean_distance(
+            &detection.get_center(),
+            &Point::new(prediction.0, prediction.1),
+        );
+
+        assert_eq!(detection.distance_to_predicted(&track), expected);
+        assert_eq!(track.get_predicted_position_readonly(), prediction);
+        assert_eq!(
+            detection.get_predicted_position_readonly(),
+            detection_prediction
+        );
+        assert_eq!(track.get_position_uncertainty(), track_uncertainty);
+        assert_eq!(detection.get_position_uncertainty(), detection_uncertainty);
+    }
+
+    #[test]
+    fn test_prediction_distance_uses_detection_center_simple_blob() {
+        check_prediction_distance_uses_detection_center(SimpleBlob::new_with_dt);
+    }
+
+    #[test]
+    fn test_prediction_distance_uses_detection_center_bbox() {
+        check_prediction_distance_uses_detection_center(BlobBBox::new_with_dt);
+    }
+
+    fn check_prediction_matching_rejects_distant_detection<B: Blob>(new_blob: fn(Rect, f32) -> B) {
+        for offset in [0.0, 1024.0, -1024.0] {
+            let mut tracker = super::SimpleTracker::default();
+            let mut frame = vec![new_blob(Rect::new(offset, offset, 10.0, 10.0), 0.125)];
+            let old_id = frame[0].get_id();
+            tracker.match_objects(&mut frame).unwrap();
+
+            let mut frame = vec![new_blob(
+                Rect::new(offset + 1000.0, offset + 1000.0, 10.0, 10.0),
+                0.125,
+            )];
+            let new_id = frame[0].get_id();
+            tracker.match_objects(&mut frame).unwrap();
+
+            assert_eq!(frame[0].get_id(), new_id, "scene offset: {offset}");
+            assert_eq!(tracker.objects.len(), 2);
+            assert_eq!(tracker.objects[&old_id].get_no_match_times(), 1);
+            assert_eq!(tracker.objects[&new_id].get_no_match_times(), 0);
+        }
+    }
+
+    #[test]
+    fn test_prediction_matching_rejects_distant_detection_simple_blob() {
+        check_prediction_matching_rejects_distant_detection(SimpleBlob::new_with_dt);
+    }
+
+    #[test]
+    fn test_prediction_matching_rejects_distant_detection_bbox() {
+        check_prediction_matching_rejects_distant_detection(BlobBBox::new_with_dt);
+    }
+
+    fn check_prediction_matching_preserves_moving_track<B: Blob>(new_blob: fn(Rect, f32) -> B) {
+        let mut tracker = super::SimpleTracker::default();
+        let mut frame = vec![new_blob(Rect::new(100.0, 200.0, 10.0, 10.0), 0.125)];
+        let id = frame[0].get_id();
+        tracker.match_objects(&mut frame).unwrap();
+
+        for step in 1..=8 {
+            let mut frame = vec![new_blob(
+                Rect::new(100.0 + step as f32 * 5.0, 200.0, 10.0, 10.0),
+                0.125,
+            )];
+            tracker.match_objects(&mut frame).unwrap();
+            assert_eq!(frame[0].get_id(), id);
+        }
+
+        // After a longer interval, only the prediction is close enough to match.
+        let dt = 2.0;
+        let mut expected = tracker.objects[&id].clone();
+        expected.set_dt(dt);
+        let (x, y) = expected.get_predicted_position_readonly();
+        let detection = new_blob(Rect::new(x - 5.0, y - 5.0, 10.0, 10.0), dt);
+        assert!(detection.distance_to(&expected) > 30.0);
+        expected.predict_next_position();
+        expected.update(&detection).unwrap();
+
+        let mut frame = vec![detection];
+        tracker.match_objects(&mut frame).unwrap();
+
+        assert_eq!(frame[0].get_id(), id);
+        assert_eq!(tracker.objects.len(), 1);
+        let track = &tracker.objects[&id];
+        assert_eq!(track.get_no_match_times(), 0);
+        assert_eq!(track.get_lost_seconds(), 0.0);
+        assert_eq!(
+            track.get_predicted_position_readonly(),
+            expected.get_predicted_position_readonly()
+        );
+        assert_eq!(
+            track.get_position_uncertainty(),
+            expected.get_position_uncertainty()
+        );
+    }
+
+    #[test]
+    fn test_prediction_matching_preserves_moving_track_simple_blob() {
+        check_prediction_matching_preserves_moving_track(SimpleBlob::new_with_dt);
+    }
+
+    #[test]
+    fn test_prediction_matching_preserves_moving_track_bbox() {
+        check_prediction_matching_preserves_moving_track(BlobBBox::new_with_dt);
+    }
+
+    fn check_detection_dt_before_prediction<B: Blob>(new_blob: fn(Rect, f32) -> B) {
+        let mut frame = vec![
+            new_blob(Rect::new(100.0, 200.0, 30.0, 40.0), 0.125),
+            new_blob(Rect::new(1000.0, 200.0, 30.0, 40.0), 0.125),
+        ];
+        let matched_id = frame[0].get_id();
+        let missed_id = frame[1].get_id();
+        let mut tracker = super::SimpleTracker::default();
+        tracker.match_objects(&mut frame).unwrap();
+
+        let dt = 0.5;
+        let detection = new_blob(Rect::new(104.0, 200.0, 30.0, 40.0), dt);
+        let mut expected_matched = tracker.objects[&matched_id].clone();
+        expected_matched.set_dt(dt);
+        expected_matched.predict_next_position();
+        expected_matched.update(&detection).unwrap();
+        let mut expected_missed = tracker.objects[&missed_id].clone();
+        expected_missed.set_dt(dt);
+        expected_missed.predict_next_position();
+
+        let mut frame = vec![detection];
+        tracker.match_objects(&mut frame).unwrap();
+
+        assert_eq!(frame[0].get_id(), matched_id);
+        assert_eq!(tracker.objects.len(), 2);
+        for (id, expected) in [(matched_id, expected_matched), (missed_id, expected_missed)] {
+            let track = &tracker.objects[&id];
+            assert_eq!(track.get_dt(), dt);
+            assert_eq!(
+                track.get_predicted_position_readonly(),
+                expected.get_predicted_position_readonly()
+            );
+            assert_eq!(
+                track.get_position_uncertainty(),
+                expected.get_position_uncertainty()
+            );
+        }
+    }
+
+    #[test]
+    fn test_detection_dt_before_prediction() {
+        check_detection_dt_before_prediction(SimpleBlob::new_with_dt);
+        check_detection_dt_before_prediction(BlobBBox::new_with_dt);
+    }
+
+    fn check_detection_dt_controls_lost_time<B: Blob>(new_blob: fn(Rect, f32) -> B) {
+        let bbox = Rect::new(100.0, 200.0, 30.0, 40.0);
+        let mut frame = vec![
+            new_blob(bbox.clone(), 0.125),
+            new_blob(Rect::new(1000.0, 200.0, 30.0, 40.0), 0.125),
+        ];
+        let matched_id = frame[0].get_id();
+        let missed_id = frame[1].get_id();
+        let mut tracker = super::SimpleTracker::default();
+        tracker.set_max_lost_seconds(0.75);
+        tracker.match_objects(&mut frame).unwrap();
+
+        for (index, (dt, lost_seconds)) in [(0.5, 0.5), (0.25, 0.75)].into_iter().enumerate() {
+            let mut frame = vec![new_blob(bbox.clone(), dt)];
+            tracker.match_objects(&mut frame).unwrap();
+            assert_eq!(frame[0].get_id(), matched_id);
+            let matched = &tracker.objects[&matched_id];
+            assert_eq!(matched.get_dt(), dt);
+            assert_eq!(matched.get_lost_seconds(), 0.0);
+            let missed = &tracker.objects[&missed_id];
+            assert_eq!(missed.get_dt(), dt);
+            assert_eq!(missed.get_no_match_times(), index + 1);
+            assert_eq!(missed.get_lost_seconds(), lost_seconds);
+        }
+
+        let mut frame = vec![new_blob(bbox, 0.125)];
+        tracker.match_objects(&mut frame).unwrap();
+        assert_eq!(frame[0].get_id(), matched_id);
+        assert_eq!(tracker.objects.len(), 1);
+        assert!(!tracker.objects.contains_key(&missed_id));
+
+        // Empty frames keep the last interval unless the caller supplies a new one.
+        tracker.match_objects(&mut vec![]).unwrap();
+        let track = &tracker.objects[&matched_id];
+        assert_eq!(track.get_dt(), 0.125);
+        assert_eq!(track.get_no_match_times(), 1);
+        assert_eq!(track.get_lost_seconds(), 0.125);
+
+        tracker.set_dt(0.25);
+        tracker.match_objects(&mut vec![]).unwrap();
+        let track = &tracker.objects[&matched_id];
+        assert_eq!(track.get_dt(), 0.25);
+        assert_eq!(track.get_no_match_times(), 2);
+        assert_eq!(track.get_lost_seconds(), 0.375);
+    }
+
+    #[test]
+    fn test_detection_dt_controls_lost_time() {
+        check_detection_dt_controls_lost_time(SimpleBlob::new_with_dt);
+        check_detection_dt_controls_lost_time(BlobBBox::new_with_dt);
+    }
 
     fn check_missed_frame_counters<B: Blob>(new_blob: fn(Rect, f32) -> B) {
         let bbox = Rect::new(100.0, 200.0, 30.0, 40.0);
